@@ -1,0 +1,963 @@
+<title>elna eXperience 450</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+
+<style>
+  :root {
+    /* 광목·패턴지 계열 뉴트럴 — 순백이 아니라 미세하게 따뜻한 쪽으로 */
+    --paper:      #F2F0EB;
+    --paper-2:    #EAE7E0;
+    --ink:        #16161A;
+    --graphite:   #64646B;
+    --faint:      #9A968E;
+    --rule:       #D8D4CC;
+    --thread:     #C8452F;
+    --stage:      #EDEBE5;
+    --shadow:     rgba(22,22,26,.07);
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: light dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:    #131316;
+      --paper-2:  #1B1B20;
+      --ink:      #EDEAE3;
+      --graphite: #9B978F;
+      --faint:    #6A665F;
+      --rule:     #2F2F35;
+      --thread:   #E4614B;
+      --stage:    #0E0E11;
+      --shadow:   rgba(0,0,0,.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:    #131316;
+    --paper-2:  #1B1B20;
+    --ink:      #EDEAE3;
+    --graphite: #9B978F;
+    --faint:    #6A665F;
+    --rule:     #2F2F35;
+    --thread:   #E4614B;
+    --stage:    #0E0E11;
+    --shadow:   rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  /* ── 도면 타이틀블록 ─────────────────────────── */
+  .titleblock {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+    padding: 14px 20px 12px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .titleblock h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+  }
+
+  .titleblock h1 .x { color: var(--thread); }
+
+  .titleblock .sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .titleblock .spacer { flex: 1 1 auto; }
+
+  .stamp {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    color: var(--graphite);
+    white-space: nowrap;
+  }
+  .stamp b { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ── 뷰포트 + 패널 ───────────────────────────── */
+  .main {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 316px;
+  }
+
+  .stage {
+    position: relative;
+    min-height: 0;
+    background: var(--stage);
+    border-right: 1px dashed var(--rule);
+    touch-action: none;
+    cursor: grab;
+  }
+  .stage.dragging { cursor: grabbing; }
+  .stage.on-wheel { cursor: ns-resize; }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+
+  .viewmark {
+    position: absolute;
+    left: 16px;
+    bottom: 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    pointer-events: none;
+  }
+
+  .loading {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .panel {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 20px;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .block h2 {
+    margin: 0 0 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* 사양 — 라벨/값 쌍 */
+  .spec { display: grid; gap: 0; }
+  .spec div {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .spec dt {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    align-self: center;
+  }
+  .spec dd {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
+  .spec dd .note { color: var(--faint); font-size: 11px; }
+
+  /* 파트 목록 — BOM 번호는 도면의 관례 */
+  .bom { margin: 0; padding: 0; list-style: none; }
+  .bom li {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .bom .no {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--thread);
+    font-variant-numeric: tabular-nums;
+  }
+  .bom .ko { font-size: 12.5px; }
+  .bom .en {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: right;
+  }
+
+  /* 조작 */
+  .controls { display: flex; flex-wrap: wrap; gap: 7px; }
+
+  button {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    background: transparent;
+    border: 1px dashed var(--rule);
+    border-radius: 2px;
+    padding: 7px 11px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  button:hover { color: var(--ink); border-color: var(--faint); }
+  button[aria-pressed="true"] {
+    color: var(--thread);
+    border-color: var(--thread);
+    border-style: solid;
+  }
+  button:focus-visible {
+    outline: 2px solid var(--thread);
+    outline-offset: 2px;
+  }
+
+  .hint {
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--graphite);
+    border-left: 1px solid var(--thread);
+    padding-left: 11px;
+  }
+  .hint b { color: var(--ink); font-weight: 600; }
+
+  .caveat {
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--faint);
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+  }
+
+  #fallback[hidden] { display: none; }
+  #fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--graphite);
+  }
+
+  @media (max-width: 880px) {
+    .app { height: auto; min-height: 100%; }
+    .main { grid-template-columns: minmax(0, 1fr); }
+    .stage {
+      height: 56vh;
+      min-height: 320px;
+      border-right: 0;
+      border-bottom: 1px dashed var(--rule);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+
+<div class="app">
+  <div class="titleblock">
+    <h1>elna e<span class="x">X</span>perience 450</h1>
+    <span class="sub">재봉틀 · 3D 모델</span>
+    <span class="spacer"></span>
+    <span class="stamp">UNIT <b>mm</b> &nbsp;·&nbsp; TRI <b id="tri">—</b></span>
+  </div>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="loading" id="loading">모델 생성 중</div>
+      <div id="fallback" hidden>
+        3D 라이브러리를 불러오지 못했습니다.<br>네트워크를 확인한 뒤 새로고침해 주세요.
+      </div>
+      <div class="viewmark">Drag to orbit · Scroll to zoom</div>
+    </div>
+
+    <aside class="panel">
+      <div class="block">
+        <h2>모델링 사양</h2>
+        <dl class="spec">
+          <div><dt>대상</dt><dd>elna eXperience 450</dd></div>
+          <div><dt>생성</dt><dd>Three.js 프리미티브<br><span class="note">절차적 생성 · 외부 메시 없음</span></dd></div>
+          <div><dt>치수</dt><dd>400 × 298 × 168<br><span class="note">사진 기준 추정치</span></dd></div>
+          <div><dt>파트</dt><dd>14</dd></div>
+        </dl>
+      </div>
+
+      <div class="block">
+        <h2>부품 목록</h2>
+        <ol class="bom">
+          <li><span class="no">01</span><span class="ko">본체 셸</span><span class="en">Body</span></li>
+          <li><span class="no">02</span><span class="ko">핸드휠</span><span class="en">Handwheel</span></li>
+          <li><span class="no">03</span><span class="ko">조작 패널</span><span class="en">Panel</span></li>
+          <li><span class="no">04</span><span class="ko">땀 선택 도표</span><span class="en">Chart</span></li>
+          <li><span class="no">05</span><span class="ko">바늘대 · 바늘</span><span class="en">Needle bar</span></li>
+          <li><span class="no">06</span><span class="ko">노루발</span><span class="en">Presser</span></li>
+          <li><span class="no">07</span><span class="ko">바늘판</span><span class="en">Plate</span></li>
+          <li><span class="no">08</span><span class="ko">실걸이 봉</span><span class="en">Spool pin</span></li>
+          <li><span class="no">09</span><span class="ko">밑실 감개</span><span class="en">Winder</span></li>
+          <li><span class="no">10</span><span class="ko">실채기</span><span class="en">Take-up</span></li>
+          <li><span class="no">11</span><span class="ko">전원부</span><span class="en">Inlet</span></li>
+          <li><span class="no">12</span><span class="ko">명판</span><span class="en">Badge</span></li>
+          <li><span class="no">13</span><span class="ko">실패 · 재봉실</span><span class="en">Spool</span></li>
+          <li><span class="no">14</span><span class="ko">실 가이드 고리</span><span class="en">Guide</span></li>
+        </ol>
+      </div>
+
+      <div class="block">
+        <h2>조작</h2>
+        <div class="controls">
+          <button id="btn-spin" aria-pressed="true">자동 회전</button>
+          <button id="btn-sew" aria-pressed="true">바느질</button>
+          <button id="btn-reset">시점 초기화</button>
+        </div>
+      </div>
+
+      <p class="hint">
+        <b>핸드휠을 위아래로 드래그</b>하면 바늘이 오르내립니다.
+        실제 기계와 같이 <b>한 바퀴 = 한 땀</b>이고, 실채기도 함께 움직입니다.
+      </p>
+
+      <p class="caveat">
+        사진 네 장에서 형태를 읽어 만든 근사 모델입니다.
+        실루엣·비례·특징부 위주이며 내부 기구와 미세 디테일은 생략했습니다.
+      </p>
+    </aside>
+  </div>
+</div>
+
+<script type="module">
+  const stage = document.getElementById('stage');
+  const loading = document.getElementById('loading');
+
+  let THREE;
+  try {
+    THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+  } catch (err) {
+    loading.remove();
+    document.getElementById('fallback').hidden = false;
+  }
+
+  if (THREE) build();
+
+  function build() {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* ── 렌더러 ───────────────────────────────── */
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    stage.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 1, 10, 4000);
+
+    /* 스튜디오 환경 — 캔버스 그라데이션을 equirect 로 써서 플라스틱 광택을 만든다 */
+    (function environment() {
+      const c = document.createElement('canvas');
+      c.width = 32; c.height = 128;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0.00, '#ffffff');
+      grad.addColorStop(0.42, '#eceae5');
+      grad.addColorStop(0.55, '#b4b1aa');
+      grad.addColorStop(1.00, '#5f5c57');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 32, 128);
+      const tex = new THREE.CanvasTexture(c);
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromEquirectangular(tex).texture;
+      pmrem.dispose();
+      tex.dispose();
+    })();
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xc9c5bd, 0.55));
+
+    /* 정면(-Z)이 카메라 쪽이므로 키 라이트도 앞에서 넣는다 */
+    const key = new THREE.DirectionalLight(0xffffff, 2.0);
+    key.position.set(400, 540, 400);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.left = -340; key.shadow.camera.right = 340;
+    key.shadow.camera.top = 340; key.shadow.camera.bottom = -340;
+    key.shadow.camera.near = 100; key.shadow.camera.far = 1400;
+    key.shadow.bias = -0.0015;
+    scene.add(key);
+
+    const fill = new THREE.DirectionalLight(0xf4f2ee, 0.62);
+    fill.position.set(-460, 210, 280);
+    scene.add(fill);
+
+    const rim = new THREE.DirectionalLight(0xffffff, 0.9);
+    rim.position.set(-80, 280, -520);
+    scene.add(rim);
+
+    /* ── 재질 ─────────────────────────────────── */
+    const M = {
+      body:  new THREE.MeshPhysicalMaterial({ color: 0xf6f4f0, roughness: 0.40, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.30 }),
+      red:   new THREE.MeshPhysicalMaterial({ color: 0xd4362b, roughness: 0.34, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18 }),
+      chrome:new THREE.MeshStandardMaterial({ color: 0xd9d9de, metalness: 1, roughness: 0.22 }),
+      steel: new THREE.MeshStandardMaterial({ color: 0xb8b8bf, metalness: 1, roughness: 0.34 }),
+      dark:  new THREE.MeshStandardMaterial({ color: 0x1c1c21, roughness: 0.52, metalness: 0.12 }),
+      black: new THREE.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.62, metalness: 0.05 }),
+      grey:  new THREE.MeshStandardMaterial({ color: 0xcfccc6, roughness: 0.55, metalness: 0 }),
+      thread:new THREE.MeshStandardMaterial({ color: 0x4a6fa5, roughness: 0.92, metalness: 0 })
+    };
+
+    /* ── 모서리를 둥글린 2D 프로파일 ───────────── */
+    function roundedShape(pts, radii) {
+      const s = new THREE.Shape();
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const prev = pts[(i - 1 + n) % n], cur = pts[i], next = pts[(i + 1) % n];
+        const v1x = prev[0] - cur[0], v1y = prev[1] - cur[1];
+        const v2x = next[0] - cur[0], v2y = next[1] - cur[1];
+        const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+        const r = Math.min(radii[i] || 0, l1 / 2, l2 / 2);
+        const ax = cur[0] + v1x / l1 * r, ay = cur[1] + v1y / l1 * r;
+        const bx = cur[0] + v2x / l2 * r, by = cur[1] + v2y / l2 * r;
+        if (i === 0) s.moveTo(ax, ay); else s.lineTo(ax, ay);
+        if (r > 0) s.quadraticCurveTo(cur[0], cur[1], bx, by); else s.lineTo(bx, by);
+      }
+      s.closePath();
+      return s;
+    }
+
+    /* 정면 실루엣: 베드 + 기둥 + 암 + 헤드, 가운데가 뚫린 コ 형태 */
+    const PROFILE = [
+      [  0,   0], [400,   0], [400, 298], [ 28, 298],
+      [ 28, 150], [108, 150], [108, 205], [262, 205],
+      [262,  78], [  0,  78]
+    ];
+    const RADII = [10, 10, 26, 18, 12, 10, 18, 58, 44, 10];
+
+    const DEPTH = 150, BEV = 4;
+    /* 압출은 +Z 로 나간다. 사진처럼 바늘이 왼쪽에 오려면
+       장식이 붙은 면이 +Z(카메라 쪽)여야 한다. */
+    const FACE = DEPTH + BEV;        // 앞면
+    const REAR = -BEV;               // 뒷면
+
+    const machine = new THREE.Group();
+    scene.add(machine);
+
+    const shell = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(roundedShape(PROFILE, RADII), {
+        depth: DEPTH, bevelEnabled: true, bevelThickness: BEV,
+        bevelSize: BEV, bevelOffset: 0, bevelSegments: 3, curveSegments: 22
+      }),
+      M.body
+    );
+    machine.add(shell);
+
+    /* 아래로 살짝 튀어나온 받침 */
+    const plinth = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[2, 0], [398, 0], [398, 26], [2, 26]], [7, 7, 3, 3]),
+        { depth: 162, bevelEnabled: true, bevelThickness: 3, bevelSize: 3, bevelOffset: 0, bevelSegments: 2, curveSegments: 8 }
+      ),
+      M.body
+    );
+    plinth.position.z = -6;
+    machine.add(plinth);
+
+    /* ── 부품 헬퍼 ────────────────────────────── */
+    const box = (w, h, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const cyl = (rt, rb, h, mat, seg = 32) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+
+    function plate(w, h, tex, z) {                       // 전면에 붙이는 데칼
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+      );
+      m.position.z = z;
+      return m;
+    }
+
+    /* 02 · 핸드휠 — 기계에서 가장 강한 색 */
+    /* 기울기(z)와 회전(y)을 한 그룹에 같이 주면 오일러 순서 때문에 축이 기울어진다.
+       바깥 그룹이 축을 X 로 눕히고, 안쪽 그룹만 제 축으로 돈다. */
+    const wheel = new THREE.Group();
+    wheel.position.set(400, 236, 76);
+    wheel.rotation.z = -Math.PI / 2;   // +Y 를 +X(본체 바깥)로. +90° 면 안쪽으로 박힌다
+    const wheelSpin = new THREE.Group();
+    wheel.add(wheelSpin);
+
+    const wheelOuter = cyl(52, 52, 24, M.red, 48);
+    wheelOuter.position.y = 12;
+    const wheelInner = cyl(38, 38, 28, M.red, 48);
+    wheelInner.position.y = 13;
+    const wheelHub = cyl(9, 9, 30, M.steel, 20);
+    wheelHub.position.y = 14;
+    const hubSlot = box(2, 1, 13, M.dark);                 // 중심 스핀들 홈 — 회전이 보이는 단서
+    hubSlot.position.y = 29.2;
+    wheelSpin.add(wheelOuter, wheelInner, wheelHub, hubSlot);
+    machine.add(wheel);
+
+    /* 03 · 조작 패널 — 직사각형이 아니라 왼쪽이 솟았다가 오른쪽으로 흘러내린다 */
+    const panelPlate = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[0, 0], [18, 52], [158, 52], [184, 0]],
+                     [5, 10, 18, 8]),
+        { depth: 5, bevelEnabled: true, bevelThickness: 1, bevelSize: 1,
+          bevelOffset: 0, bevelSegments: 2, curveSegments: 14 }
+      ),
+      M.dark
+    );
+    panelPlate.position.set(116, 242, FACE - 4);   // 도형 원점이 좌하단이라 모서리 기준
+    machine.add(panelPlate);
+
+    function displayTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 160;
+      const g = c.getContext('2d');
+      g.fillStyle = '#07090a'; g.fillRect(0, 0, 256, 160);
+      g.fillStyle = '#7dffa4';
+      g.font = '500 116px "IBM Plex Mono", monospace';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = '#4dff88'; g.shadowBlur = 26;
+      g.fillText('01', 128, 86);
+      return new THREE.CanvasTexture(c);
+    }
+    const display = plate(46, 29, displayTexture(), FACE + 2.8);
+    display.position.set(186, 272, FACE + 2.8);
+    machine.add(display);
+
+    /* 패널 위 작은 지시등 */
+    [[152, 285], [152, 277], [248, 280], [262, 280]].forEach(([x, y]) => {
+      const led = box(7, 3, 1, new THREE.MeshBasicMaterial({ color: 0x8f9298 }));
+      led.position.set(x, y, FACE + 2.6);
+      machine.add(led);
+    });
+
+    /* 패널 아래 버튼 줄 */
+    const btnRow = box(176, 14, 4, M.grey);
+    btnRow.position.set(206, 234, FACE - 1);
+    machine.add(btnRow);
+    for (let i = 0; i < 5; i++) {
+      const sep = box(1.4, 12, 1, M.body);
+      sep.position.set(140 + i * 29, 234, FACE + 1.2);
+      machine.add(sep);
+    }
+
+    /* 04 · 땀 선택 도표 — 기둥 전면의 인쇄 */
+    function chartTexture() {
+      const c = document.createElement('canvas');
+      c.width = 420; c.height = 460;
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 420, 460);
+      g.strokeStyle = '#70707a'; g.fillStyle = '#70707a'; g.lineWidth = 3;
+      const cols = 3, rows = 9, cw = 420 / cols, ch = 460 / rows;
+      let n = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let col = 0; col < cols; col++) {
+          const x = col * cw + 30, y = r * ch + ch / 2, w = cw - 46;
+          g.font = '400 13px "IBM Plex Mono", monospace';
+          g.textAlign = 'left'; g.textBaseline = 'middle';
+          g.fillText(String(n + 1).padStart(2, '0'), col * cw + 4, y);
+          g.beginPath();
+          const kind = n % 6;
+          if (kind === 0) {                                   // 직선 박음질
+            for (let i = 0; i < w; i += 13) { g.moveTo(x + i, y); g.lineTo(x + i + 8, y); }
+          } else if (kind === 1) {                            // 지그재그
+            g.moveTo(x, y + 8);
+            for (let i = 0; i < w; i += 11) { g.lineTo(x + i + 5.5, y - 8); g.lineTo(x + i + 11, y + 8); }
+          } else if (kind === 2) {                            // 새틴
+            for (let i = 0; i < w; i += 4) { g.moveTo(x + i, y - 8); g.lineTo(x + i, y + 8); }
+          } else if (kind === 3) {                            // 블라인드 헴
+            g.moveTo(x, y + 6);
+            for (let i = 0; i < w; i += 26) {
+              g.lineTo(x + i + 16, y + 6); g.lineTo(x + i + 21, y - 7); g.lineTo(x + i + 26, y + 6);
+            }
+          } else if (kind === 4) {                            // 삼중 스트레치
+            for (let i = 0; i < w; i += 9) { g.moveTo(x + i, y - 3); g.lineTo(x + i + 6, y + 3); }
+            g.moveTo(x, y); g.lineTo(x + w, y);
+          } else {                                            // 장식 스캘럽
+            g.moveTo(x, y + 7);
+            for (let i = 0; i < w; i += 18) g.quadraticCurveTo(x + i + 9, y - 13, x + i + 18, y + 7);
+          }
+          g.stroke();
+          n++;
+        }
+      }
+      return new THREE.CanvasTexture(c);
+    }
+    const chart = plate(112, 122, chartTexture(), 0);
+    chart.position.set(330, 152, FACE + 0.6);
+    machine.add(chart);
+
+    /* 12 · elna 명판 */
+    function badgeTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 148;
+      const g = c.getContext('2d');
+      g.fillStyle = '#d4362b'; g.fillRect(0, 0, 256, 148);
+      g.fillStyle = '#ffffff';
+      g.font = '600 62px "IBM Plex Sans KR", sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('elna', 128, 60);
+      g.font = '400 17px "IBM Plex Mono", monospace';
+      g.fillText('SWISS DESIGN', 128, 108);
+      return new THREE.CanvasTexture(c);
+    }
+    const badge = plate(54, 31, badgeTexture(), 0);
+    badge.position.set(348, 38, FACE + 0.6);
+    machine.add(badge);
+
+    /* 07 · 바늘판 + 밑실 덮개 */
+    const needlePlate = box(146, 2.5, 102, M.chrome);
+    needlePlate.position.set(98, 78.4, 72);
+    machine.add(needlePlate);
+
+    const feedSlot = box(46, 1, 4, M.dark);
+    feedSlot.position.set(72, 79.6, 72);
+    machine.add(feedSlot);
+
+    const bobbinCover = box(86, 1.6, 74, M.grey);
+    bobbinCover.position.set(72, 78.9, 110);
+    machine.add(bobbinCover);
+
+    /* 베드 전면 — 보조테이블 분할선과 개폐 버튼 */
+    const seam = box(1.4, 62, 1, M.grey);
+    seam.position.set(196, 42, FACE + 0.4);
+    machine.add(seam);
+    const knob = cyl(9, 9, 1.5, M.grey, 24);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.set(258, 24, FACE + 0.4);
+    machine.add(knob);
+
+    /* 05 · 바늘대 + 바늘 — 핸드휠에 연동해 오르내린다 */
+    const needleRig = new THREE.Group();
+    const needleBar = cyl(3.6, 3.6, 56, M.chrome, 18);
+    needleBar.position.set(68, 124, 78);
+    const clamp = box(11, 9, 11, M.steel);
+    clamp.position.set(68, 99, 78);
+    const needle = cyl(0.9, 0.5, 36, M.chrome, 10);
+    needle.position.set(68, 80, 78);
+    needleRig.add(needleBar, clamp, needle);
+    machine.add(needleRig);
+
+    /* 06 · 노루발 — 바닥에 고정 */
+    const presserBar = cyl(3, 3, 46, M.chrome, 16);
+    presserBar.position.set(68, 130, 58);
+    machine.add(presserBar);
+    const shank = box(7, 20, 7, M.steel);
+    shank.position.set(68, 100, 58);
+    machine.add(shank);
+    const footBase = box(11, 3, 34, M.chrome);
+    footBase.position.set(68, 82, 62);
+    machine.add(footBase);
+    [-4.5, 4.5].forEach(dx => {
+      const toe = box(4, 3.4, 24, M.chrome);
+      toe.position.set(68 + dx, 81.5, 70);
+      machine.add(toe);
+    });
+    const screw = cyl(4, 4, 6, M.steel, 16);
+    screw.rotation.z = Math.PI / 2;
+    screw.position.set(78, 118, 58);
+    machine.add(screw);
+
+    /* 노루발 올림 레버 */
+    const lifter = box(7, 6, 34, M.black);
+    lifter.position.set(70, 140, 26);
+    machine.add(lifter);
+
+    /* 10 · 실채기 — 헤드 왼쪽 슬롯에서 왕복 */
+    const takeUpSlot = box(2, 54, 26, M.dark);
+    takeUpSlot.position.set(28, 232, 106);
+    machine.add(takeUpSlot);
+
+    const takeUp = new THREE.Group();
+    const lever = box(26, 6, 5, M.chrome);
+    lever.position.x = -10;
+    takeUp.add(lever);
+    takeUp.position.set(30, 236, 110);
+    machine.add(takeUp);
+
+    /* 윗실 장력 다이얼 */
+    const tension = cyl(15, 15, 12, M.grey, 28);
+    tension.rotation.x = Math.PI / 2;
+    tension.position.set(52, 196, FACE - 2);
+    machine.add(tension);
+
+    /* 08 · 실걸이 — 기둥이 오른쪽 끝에 서고 봉이 왼쪽으로 뻗는 ㄱ자.
+       실패는 왼쪽 열린 끝으로 끼우고, 깔대기는 기둥 쪽(오른쪽)에서 실패를 막는다. */
+    const spoolRig = new THREE.Group();
+    spoolRig.position.set(370, 296, 64);
+    machine.add(spoolRig);
+
+    const post = cyl(5, 5, 28, M.body, 16);          // 세로 기둥
+    post.position.y = 14;
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 12), M.body);
+    elbow.position.y = 26;                            // 꺾이는 모서리
+    const arm = cyl(4.6, 4.6, 88, M.body, 16);        // 가로 봉 — 왼쪽으로
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(-44, 26, 0);
+    spoolRig.add(post, elbow, arm);
+
+    /* 실패가 빠지지 않게 막는 깔대기 — 봉의 바깥쪽 끝(왼쪽)에 마지막으로 끼운다.
+       넓은 쪽(반지름 14)이 오른쪽 실패를 향하고 좁은 쪽이 바깥을 본다. */
+    const spoolCap = new THREE.Mesh(new THREE.CylinderGeometry(14, 6, 12, 24), M.grey);
+    spoolCap.rotation.z = -Math.PI / 2;
+    spoolCap.position.set(-80, 26, 0);
+    spoolRig.add(spoolCap);
+
+    /* 13 · 실패 + 재봉실 — 양 끝판 사이에 실이 감긴다 */
+    const spoolCore = cyl(9, 9, 42, M.grey, 24);
+    spoolCore.rotation.z = Math.PI / 2;
+    spoolCore.position.set(-48, 26, 0);
+    const threadWound = cyl(14.5, 14.5, 36, M.thread, 28);
+    threadWound.rotation.z = Math.PI / 2;
+    threadWound.position.set(-48, 26, 0);
+    spoolRig.add(spoolCore, threadWound);
+    [-27, -69].forEach(x => {
+      const flange = cyl(16, 16, 3, M.grey, 24);
+      flange.rotation.z = Math.PI / 2;
+      flange.position.set(x, 26, 0);
+      spoolRig.add(flange);
+    });
+
+    /* 09 · 밑실 감개 */
+    const winder = cyl(6, 6, 16, M.grey, 20);
+    winder.position.set(250, 304, 96);
+    machine.add(winder);
+    const winderStop = box(4, 12, 4, M.black);
+    winderStop.position.set(234, 302, 96);
+    machine.add(winderStop);
+
+    /* 14 · 실 가이드 고리 — 철제. 실이 여기를 지나 아래로 내려간다 */
+    const guidePost = cyl(2, 2, 15, M.chrome, 12);
+    guidePost.position.set(74, 306, 58);
+    machine.add(guidePost);
+    const guideHook = new THREE.Mesh(
+      new THREE.TorusGeometry(7, 1.7, 10, 22, Math.PI * 1.45), M.chrome
+    );
+    guideHook.position.set(74, 316, 58);
+    guideHook.rotation.set(0, Math.PI / 2, -0.55);
+    machine.add(guideHook);
+
+    const midGuide = cyl(2, 2, 13, M.chrome, 12);
+    midGuide.position.set(206, 306, 62);
+    machine.add(midGuide);
+
+    /* 실 — 실패에서 가이드를 지나 몸체 안으로 들어간다.
+       앞면 밖으로 나오던 구간은 잘라냈다(장력 다이얼 앞을 가로지르던 부분). */
+    const thread = new THREE.Mesh(
+      new THREE.TubeGeometry(
+        new THREE.CatmullRomCurve3([
+          new THREE.Vector3(322, 334, 64),
+          new THREE.Vector3(206, 314, 62),
+          new THREE.Vector3( 76, 317, 58),
+          new THREE.Vector3( 54, 286, 64)
+        ]),
+        90, 0.9, 6, false
+      ),
+      M.thread
+    );
+    machine.add(thread);
+
+    /* 11 · 우측면 전원부 + 통풍구 */
+    const RIGHT = 400 + BEV;
+    const rocker = box(5, 17, 27, M.black);
+    rocker.position.set(RIGHT, 122, 46);
+    machine.add(rocker);
+    const inlet = box(5, 26, 32, M.black);
+    inlet.position.set(RIGHT, 74, 46);
+    machine.add(inlet);
+    for (let i = 0; i < 7; i++) {
+      const vent = box(3, 3, 38, M.grey);
+      vent.position.set(RIGHT - 0.6, 62 + i * 11, 104);
+      machine.add(vent);
+    }
+
+    /* 그림자 받는 바닥 */
+    machine.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(2600, 2600),
+      new THREE.ShadowMaterial({ opacity: 0.17 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    /* 원점을 기계 중심으로 */
+    machine.position.set(-200, -142, -75);
+
+    /* 삼각형 수 표시 — CAD 뷰포트의 관례 */
+    let tri = 0;
+    machine.traverse(o => {
+      if (o.isMesh && o.geometry) {
+        const g = o.geometry;
+        tri += (g.index ? g.index.count : g.attributes.position.count) / 3;
+      }
+    });
+    document.getElementById('tri').textContent = Math.round(tri).toLocaleString();
+
+    /* ── 카메라 조작 ──────────────────────────── */
+    /* 앞면은 +Z, 핸드휠은 +X. 이 방향에서 +X 가 화면 오른쪽이 되어
+       사진처럼 바늘이 왼쪽, 핸드휠이 오른쪽에 온다. */
+    const HOME = { az: 0.72, pol: 1.15, dist: 880 };
+    const cam = { ...HOME };
+    const target = new THREE.Vector3(0, 6, 0);
+
+    function place() {
+      cam.pol = Math.max(0.22, Math.min(Math.PI - 0.22, cam.pol));
+      cam.dist = Math.max(430, Math.min(1700, cam.dist));
+      camera.position.set(
+        target.x + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az),
+        target.y + cam.dist * Math.cos(cam.pol),
+        target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az)
+      );
+      camera.lookAt(target);
+    }
+    place();
+
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let mode = null, lastX = 0, lastY = 0;
+    let spin = !reduceMotion, sew = !reduceMotion;
+    let wheelAngle = 0;
+
+    function hitsWheel(ev) {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+      ndc.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+      ray.setFromCamera(ndc, camera);
+      return ray.intersectObject(wheel, true).length > 0;
+    }
+
+    stage.addEventListener('pointermove', ev => {
+      if (!mode) stage.classList.toggle('on-wheel', hitsWheel(ev));
+    });
+
+    stage.addEventListener('pointerdown', ev => {
+      mode = hitsWheel(ev) ? 'wheel' : 'orbit';
+      lastX = ev.clientX; lastY = ev.clientY;
+      stage.setPointerCapture(ev.pointerId);
+      stage.classList.add('dragging');
+    });
+
+    stage.addEventListener('pointermove', ev => {
+      if (!mode) return;
+      const dx = ev.clientX - lastX, dy = ev.clientY - lastY;
+      lastX = ev.clientX; lastY = ev.clientY;
+      if (mode === 'orbit') {
+        cam.az -= dx * 0.008;
+        cam.pol -= dy * 0.008;
+        place();
+      } else {
+        wheelAngle += dy * 0.022;
+      }
+    });
+
+    function endDrag(ev) {
+      mode = null;
+      stage.classList.remove('dragging');
+      if (ev && ev.pointerId !== undefined && stage.hasPointerCapture?.(ev.pointerId)) {
+        stage.releasePointerCapture(ev.pointerId);
+      }
+    }
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+
+    stage.addEventListener('wheel', ev => {
+      ev.preventDefault();
+      cam.dist *= 1 + Math.sign(ev.deltaY) * 0.09;
+      place();
+    }, { passive: false });
+
+    /* ── 토글 ─────────────────────────────────── */
+    const btnSpin = document.getElementById('btn-spin');
+    const btnSew = document.getElementById('btn-sew');
+    btnSpin.setAttribute('aria-pressed', String(spin));
+    btnSew.setAttribute('aria-pressed', String(sew));
+
+    btnSpin.addEventListener('click', () => {
+      spin = !spin; btnSpin.setAttribute('aria-pressed', String(spin));
+    });
+    btnSew.addEventListener('click', () => {
+      sew = !sew; btnSew.setAttribute('aria-pressed', String(sew));
+    });
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      Object.assign(cam, HOME); place();
+    });
+
+    /* ── 크기 대응 ────────────────────────────── */
+    function resize() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(stage);
+    resize();
+
+    /* ── 루프 ─────────────────────────────────── */
+    const STROKE = 33;
+    let prev = performance.now();
+
+    function frame(now) {
+      const dt = Math.min((now - prev) / 1000, 0.05);
+      prev = now;
+
+      if (spin && mode !== 'orbit') { cam.az += dt * 0.16; place(); }
+      if (sew && mode !== 'wheel') wheelAngle += dt * 3.4;
+
+      wheelSpin.rotation.y = -wheelAngle;
+      needleRig.position.y = -STROKE * (1 - Math.cos(wheelAngle)) / 2;
+      takeUp.rotation.z = 0.42 * Math.cos(wheelAngle);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    loading.remove();
+  }
+</script>
