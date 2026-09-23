@@ -1,0 +1,707 @@
+/*
+  미싱 3D 모델 — elna eXperience 450 기준 (디테일 버전)
+  sewingMachine3dDetailed.html 안에 있던 모델 부분을 불러 쓸 수 있게 뽑아낸 것.
+  외부 메시 파일 없이 Three.js 도형으로 만든다. 단위는 mm.
+
+  쓰는 법
+    import { createSewingMachine } from './sewingMachine.js';
+    const sm = createSewingMachine(THREE);
+    scene.add(sm.machine);          // 원점 = 왼쪽 뒤 바닥 모서리, 폭 400 · 깊이 150 · 높이 약 300
+    sm.update(dt);                  // 매 프레임 — 핸드휠이 돌고 바늘·실채기가 따라 움직인다
+*/
+export function createSewingMachine(THREE, { sewSpeed = 3.4 } = {}) {
+    /* ── 재질 ─────────────────────────────────── */
+    const M = {
+      body:  new THREE.MeshPhysicalMaterial({ color: 0xf6f4f0, roughness: 0.40, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.30 }),
+      red:   new THREE.MeshPhysicalMaterial({ color: 0xd4362b, roughness: 0.34, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18 }),
+      chrome:new THREE.MeshStandardMaterial({ color: 0xd9d9de, metalness: 1, roughness: 0.22 }),
+      steel: new THREE.MeshStandardMaterial({ color: 0xb8b8bf, metalness: 1, roughness: 0.34 }),
+      dark:  new THREE.MeshStandardMaterial({ color: 0x1c1c21, roughness: 0.52, metalness: 0.12 }),
+      black: new THREE.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.62, metalness: 0.05 }),
+      grey:  new THREE.MeshStandardMaterial({ color: 0xcfccc6, roughness: 0.55, metalness: 0 }),
+      thread:new THREE.MeshStandardMaterial({ color: 0x4a6fa5, roughness: 0.92, metalness: 0 })
+    };
+
+    /* ── 모서리를 둥글린 2D 프로파일 ───────────── */
+    function roundedShape(pts, radii) {
+      const s = new THREE.Shape();
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const prev = pts[(i - 1 + n) % n], cur = pts[i], next = pts[(i + 1) % n];
+        const v1x = prev[0] - cur[0], v1y = prev[1] - cur[1];
+        const v2x = next[0] - cur[0], v2y = next[1] - cur[1];
+        const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+        const r = Math.min(radii[i] || 0, l1 / 2, l2 / 2);
+        const ax = cur[0] + v1x / l1 * r, ay = cur[1] + v1y / l1 * r;
+        const bx = cur[0] + v2x / l2 * r, by = cur[1] + v2y / l2 * r;
+        if (i === 0) s.moveTo(ax, ay); else s.lineTo(ax, ay);
+        if (r > 0) s.quadraticCurveTo(cur[0], cur[1], bx, by); else s.lineTo(bx, by);
+      }
+      s.closePath();
+      return s;
+    }
+
+    /* 정면 실루엣: 베드 + 기둥 + 암 + 헤드, 가운데가 뚫린 コ 형태 */
+    const PROFILE = [
+      [  0,   0], [400,   0], [400, 298], [ 28, 298],
+      [ 28, 150], [108, 150], [108, 205], [262, 205],
+      [262,  78], [  0,  78]
+    ];
+    const RADII = [10, 10, 26, 18, 12, 10, 18, 58, 44, 10];
+
+    const DEPTH = 150, BEV = 4;
+    /* 압출은 +Z 로 나간다. 사진처럼 바늘이 왼쪽에 오려면
+       장식이 붙은 면이 +Z(카메라 쪽)여야 한다. */
+    const FACE = DEPTH + BEV;        // 앞면
+    const REAR = -BEV;               // 뒷면
+
+    const machine = new THREE.Group();
+
+    const shell = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(roundedShape(PROFILE, RADII), {
+        depth: DEPTH, bevelEnabled: true, bevelThickness: BEV,
+        bevelSize: BEV, bevelOffset: 0, bevelSegments: 3, curveSegments: 22
+      }),
+      M.body
+    );
+    machine.add(shell);
+
+    /* 아래로 살짝 튀어나온 받침 */
+    const plinth = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[2, 0], [398, 0], [398, 26], [2, 26]], [7, 7, 3, 3]),
+        { depth: 162, bevelEnabled: true, bevelThickness: 3, bevelSize: 3, bevelOffset: 0, bevelSegments: 2, curveSegments: 8 }
+      ),
+      M.body
+    );
+    plinth.position.z = -6;
+    machine.add(plinth);
+
+    /* ── 부품 헬퍼 ────────────────────────────── */
+    const box = (w, h, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const cyl = (rt, rb, h, mat, seg = 32) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+
+    function plate(w, h, tex, z) {                       // 전면에 붙이는 데칼
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+      );
+      m.position.z = z;
+      return m;
+    }
+
+    /* 핸드휠 — 기계에서 가장 강한 색 */
+    /* 기울기(z)와 회전(y)을 한 그룹에 같이 주면 오일러 순서 때문에 축이 기울어진다.
+       바깥 그룹이 축을 X 로 눕히고, 안쪽 그룹만 제 축으로 돈다. */
+    const wheel = new THREE.Group();
+    wheel.position.set(400, 236, 76);
+    wheel.rotation.z = -Math.PI / 2;   // +Y 를 +X(본체 바깥)로. +90° 면 안쪽으로 박힌다
+    const wheelSpin = new THREE.Group();
+    wheel.add(wheelSpin);
+
+    const wheelOuter = cyl(52, 52, 24, M.red, 48);
+    wheelOuter.position.y = 12;
+    const wheelInner = cyl(38, 38, 28, M.red, 48);
+    wheelInner.position.y = 13;
+    const wheelHub = cyl(9, 9, 30, M.steel, 20);
+    wheelHub.position.y = 14;
+    const hubSlot = box(2, 1, 13, M.dark);                 // 중심 스핀들 홈 — 회전이 보이는 단서
+    hubSlot.position.y = 29.2;
+    wheelSpin.add(wheelOuter, wheelInner, wheelHub, hubSlot);
+    machine.add(wheel);
+
+    /* 조작 패널 — 직사각형이 아니라 왼쪽이 솟았다가 오른쪽으로 흘러내린다 */
+    const panelPlate = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[0, 0], [18, 52], [158, 52], [184, 0]],
+                     [5, 10, 18, 8]),
+        { depth: 5, bevelEnabled: true, bevelThickness: 1, bevelSize: 1,
+          bevelOffset: 0, bevelSegments: 2, curveSegments: 14 }
+      ),
+      M.dark
+    );
+    panelPlate.position.set(116, 242, FACE - 4);   // 도형 원점이 좌하단이라 모서리 기준
+    machine.add(panelPlate);
+
+    function displayTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 160;
+      const g = c.getContext('2d');
+      g.fillStyle = '#07090a'; g.fillRect(0, 0, 256, 160);
+      g.fillStyle = '#7dffa4';
+      g.font = '500 116px "IBM Plex Mono", monospace';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = '#4dff88'; g.shadowBlur = 26;
+      g.fillText('01', 128, 86);
+      return new THREE.CanvasTexture(c);
+    }
+    const display = plate(46, 29, displayTexture(), FACE + 2.8);
+    display.position.set(186, 272, FACE + 2.8);
+    machine.add(display);
+
+    /* 패널 위 작은 지시등 */
+    [[152, 285], [152, 277], [248, 280], [262, 280]].forEach(([x, y]) => {
+      const led = box(7, 3, 1, new THREE.MeshBasicMaterial({ color: 0x8f9298 }));
+      led.position.set(x, y, FACE + 2.6);
+      machine.add(led);
+    });
+
+    /* 패널 아래 버튼 줄 — 시작/정지 · 후진 · 바늘 위아래 · 자동 실 끊기 + 속도 슬라이더 */
+    const btnWell = box(182, 19, 3, M.dark);          // 버튼이 들어앉는 오목한 자리
+    btnWell.position.set(206, 234, FACE - 1.8);
+    machine.add(btnWell);
+
+    const BTN_X = [136, 170, 204, 238];
+    const btnShape = roundedShape([[0, 0], [26, 0], [26, 13], [0, 13]], [4, 4, 4, 4]);
+    BTN_X.forEach(x => {
+      const b = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(btnShape, {
+          depth: 2.4, bevelEnabled: true, bevelThickness: .8, bevelSize: .8,
+          bevelOffset: 0, bevelSegments: 2, curveSegments: 6
+        }),
+        M.grey
+      );
+      b.position.set(x - 13, 234 - 6.5, FACE - 1.2);
+      machine.add(b);
+    });
+
+    /* 버튼 아이콘 — 네 칸을 한 장에 그려 버튼 위에 얹는다 */
+    function buttonIcons() {
+      const c = document.createElement('canvas');
+      c.width = 544; c.height = 52;                    // 136 × 4칸
+      const g = c.getContext('2d');
+      g.strokeStyle = g.fillStyle = '#34343c';
+      g.lineWidth = 4; g.lineCap = g.lineJoin = 'round';
+      const cx = i => 68 + i * 136, cy = 26;
+
+      // 0 · 시작/정지 — 삼각형과 막대
+      g.beginPath();
+      g.moveTo(cx(0) - 16, cy - 11); g.lineTo(cx(0) - 16, cy + 11); g.lineTo(cx(0) - 1, cy); g.closePath();
+      g.fill();
+      g.fillRect(cx(0) + 5, cy - 11, 4.5, 22); g.fillRect(cx(0) + 13, cy - 11, 4.5, 22);
+
+      // 1 · 후진 — U 턴 화살표
+      g.beginPath();
+      g.moveTo(cx(1) + 14, cy + 10);
+      g.lineTo(cx(1) - 2, cy + 10);
+      g.arc(cx(1) - 2, cy, 10, Math.PI / 2, Math.PI * 1.5);
+      g.lineTo(cx(1) + 12, cy - 10);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(cx(1) + 6, cy - 17); g.lineTo(cx(1) + 14, cy - 10); g.lineTo(cx(1) + 6, cy - 3);
+      g.stroke();
+
+      // 2 · 바늘 위아래 — 바늘과 위아래 화살표
+      g.beginPath();
+      g.moveTo(cx(2), cy - 16); g.lineTo(cx(2), cy + 16);
+      g.moveTo(cx(2) - 7, cy - 9); g.lineTo(cx(2), cy - 16); g.lineTo(cx(2) + 7, cy - 9);
+      g.moveTo(cx(2) - 7, cy + 9); g.lineTo(cx(2), cy + 16); g.lineTo(cx(2) + 7, cy + 9);
+      g.stroke();
+
+      // 3 · 자동 실 끊기 — 가위
+      g.beginPath();
+      g.arc(cx(3) - 9, cy + 9, 5.5, 0, Math.PI * 2);
+      g.moveTo(cx(3) + 14.5, cy + 9);
+      g.arc(cx(3) + 9, cy + 9, 5.5, 0, Math.PI * 2);
+      g.moveTo(cx(3) - 5, cy + 5); g.lineTo(cx(3) + 12, cy - 15);
+      g.moveTo(cx(3) + 5, cy + 5); g.lineTo(cx(3) - 12, cy - 15);
+      g.stroke();
+
+      return new THREE.CanvasTexture(c);
+    }
+    const icons = plate(136, 13, buttonIcons(), 0);
+    icons.position.set(187, 234, FACE + 2.3);
+    machine.add(icons);
+
+    /* 속도 슬라이더 — 거북이에서 토끼까지 */
+    const sliderTrack = box(30, 3.2, 1.2, M.black);
+    sliderTrack.position.set(274, 234, FACE + 0.4);
+    machine.add(sliderTrack);
+    const sliderKnob = box(8, 12, 3.4, M.grey);
+    sliderKnob.position.set(280, 234, FACE + 0.6);
+    machine.add(sliderKnob);
+
+    /* 땀 선택 도표 — 기둥 전면의 인쇄 */
+    function chartTexture() {
+      const c = document.createElement('canvas');
+      c.width = 420; c.height = 460;
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 420, 460);
+      g.strokeStyle = '#70707a'; g.fillStyle = '#70707a'; g.lineWidth = 3;
+      const cols = 3, rows = 9, cw = 420 / cols, ch = 460 / rows;
+      let n = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let col = 0; col < cols; col++) {
+          const x = col * cw + 30, y = r * ch + ch / 2, w = cw - 46;
+          g.font = '400 13px "IBM Plex Mono", monospace';
+          g.textAlign = 'left'; g.textBaseline = 'middle';
+          g.fillText(String(n + 1).padStart(2, '0'), col * cw + 4, y);
+          g.beginPath();
+          const kind = n % 6;
+          if (kind === 0) {                                   // 직선 박음질
+            for (let i = 0; i < w; i += 13) { g.moveTo(x + i, y); g.lineTo(x + i + 8, y); }
+          } else if (kind === 1) {                            // 지그재그
+            g.moveTo(x, y + 8);
+            for (let i = 0; i < w; i += 11) { g.lineTo(x + i + 5.5, y - 8); g.lineTo(x + i + 11, y + 8); }
+          } else if (kind === 2) {                            // 새틴
+            for (let i = 0; i < w; i += 4) { g.moveTo(x + i, y - 8); g.lineTo(x + i, y + 8); }
+          } else if (kind === 3) {                            // 블라인드 헴
+            g.moveTo(x, y + 6);
+            for (let i = 0; i < w; i += 26) {
+              g.lineTo(x + i + 16, y + 6); g.lineTo(x + i + 21, y - 7); g.lineTo(x + i + 26, y + 6);
+            }
+          } else if (kind === 4) {                            // 삼중 스트레치
+            for (let i = 0; i < w; i += 9) { g.moveTo(x + i, y - 3); g.lineTo(x + i + 6, y + 3); }
+            g.moveTo(x, y); g.lineTo(x + w, y);
+          } else {                                            // 장식 스캘럽
+            g.moveTo(x, y + 7);
+            for (let i = 0; i < w; i += 18) g.quadraticCurveTo(x + i + 9, y - 13, x + i + 18, y + 7);
+          }
+          g.stroke();
+          n++;
+        }
+      }
+      return new THREE.CanvasTexture(c);
+    }
+    const chart = plate(112, 122, chartTexture(), 0);
+    chart.position.set(330, 152, FACE + 0.6);
+    machine.add(chart);
+
+    /* elna 명판 */
+    function badgeTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 148;
+      const g = c.getContext('2d');
+      g.fillStyle = '#d4362b'; g.fillRect(0, 0, 256, 148);
+      g.fillStyle = '#ffffff';
+      g.font = '600 62px "IBM Plex Sans KR", sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('elna', 128, 60);
+      g.font = '400 17px "IBM Plex Mono", monospace';
+      g.fillText('SWISS DESIGN', 128, 108);
+      return new THREE.CanvasTexture(c);
+    }
+    const badge = plate(54, 31, badgeTexture(), 0);
+    badge.position.set(348, 38, FACE + 0.6);
+    machine.add(badge);
+
+    /* 바늘판 + 밑실 덮개 */
+    const needlePlate = box(146, 2.5, 102, M.chrome);
+    needlePlate.position.set(98, 78.4, 72);
+    machine.add(needlePlate);
+
+    /* 톱니 — 바늘 양옆 구멍 두 개, 그 속에서 이빨이 살짝 올라온다 */
+    [64, 80].forEach(z => {
+      const slot = box(38, 1, 6, M.black);
+      slot.position.set(70, 79.4, z);
+      machine.add(slot);
+      for (let x = 55; x <= 85; x += 3.4) {
+        const tooth = box(1.6, 1.2, 4.2, M.steel);
+        tooth.position.set(x, 79.9, z);
+        machine.add(tooth);
+      }
+    });
+
+    /* 바늘 구멍 */
+    const needleHole = box(9, 1, 3, M.black);
+    needleHole.position.set(68, 79.7, 72);
+    machine.add(needleHole);
+
+    /* 시접 안내선 — 바늘 오른쪽 바늘판에 새겨진 눈금 */
+    function seamGuideTexture() {
+      const c = document.createElement('canvas');
+      c.width = 360; c.height = 240;
+      const g = c.getContext('2d');
+      g.strokeStyle = g.fillStyle = 'rgba(60, 60, 70, .75)';
+      g.lineWidth = 2.4;
+      g.font = '500 20px "IBM Plex Mono", monospace';
+      g.textAlign = 'center'; g.textBaseline = 'top';
+      [['', 0], ['1/4', 1], ['3/8', 2], ['1/2', 3], ['5/8', 4]].forEach(([label, i]) => {
+        const x = 30 + i * 72;
+        g.beginPath();
+        g.moveTo(x, 44); g.lineTo(x, 228);
+        g.stroke();
+        if (label) g.fillText(label, x, 10);
+      });
+      return new THREE.CanvasTexture(c);
+    }
+    const seamGuide = new THREE.Mesh(
+      new THREE.PlaneGeometry(60, 40),
+      new THREE.MeshBasicMaterial({ map: seamGuideTexture(), transparent: true })
+    );
+    seamGuide.rotation.x = -Math.PI / 2;               // 바늘판 위에 눕힌다
+    seamGuide.position.set(140, 79.72, 82);
+    machine.add(seamGuide);
+
+    const bobbinSeam = box(89, 1.2, 77, M.dark);        // 덮개 둘레에 드러나는 틈
+    bobbinSeam.position.set(72, 78.6, 110);
+    machine.add(bobbinSeam);
+
+    const bobbinCover = box(86, 1.6, 74, M.grey);
+    bobbinCover.position.set(72, 78.9, 110);
+    machine.add(bobbinCover);
+
+    /* 덮개 안의 밑실이 비쳐 보이는 창 */
+    const bobbinWindow = cyl(12, 12, 0.6, M.dark, 28);
+    bobbinWindow.position.set(72, 79.8, 104);
+    machine.add(bobbinWindow);
+    const bobbinThread = cyl(9, 9, 0.7, M.thread, 28);
+    bobbinThread.position.set(72, 79.9, 104);
+    machine.add(bobbinThread);
+
+    const bobbinNotch = box(16, 1.2, 4, M.dark);        // 덮개를 밀어 여는 손가락 홈
+    bobbinNotch.position.set(72, 79.8, 142);
+    machine.add(bobbinNotch);
+
+    /* 베드 전면 — 보조테이블 분할선과 개폐 버튼 */
+    const seam = box(1.4, 62, 1, M.grey);
+    seam.position.set(196, 42, FACE + 0.4);
+    machine.add(seam);
+    const knob = cyl(9, 9, 1.5, M.grey, 24);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.set(258, 24, FACE + 0.4);
+    machine.add(knob);
+
+    /* 바늘대 + 바늘 — 핸드휠에 연동해 오르내린다 */
+    const needleRig = new THREE.Group();
+    const needleBar = cyl(3.6, 3.6, 56, M.chrome, 18);
+    needleBar.position.set(68, 124, 78);
+    const clamp = box(11, 9, 11, M.steel);
+    clamp.position.set(68, 99, 78);
+    const needle = cyl(0.9, 0.5, 36, M.chrome, 10);
+    needle.position.set(68, 80, 78);
+    needleRig.add(needleBar, clamp, needle);
+    machine.add(needleRig);
+
+    /* 노루발 — 바닥에 고정 */
+    const presserBar = cyl(3, 3, 46, M.chrome, 16);
+    presserBar.position.set(68, 130, 58);
+    machine.add(presserBar);
+    const shank = box(7, 20, 7, M.steel);
+    shank.position.set(68, 100, 58);
+    machine.add(shank);
+    const footBase = box(11, 3, 34, M.chrome);
+    footBase.position.set(68, 82, 62);
+    machine.add(footBase);
+    [-4.5, 4.5].forEach(dx => {
+      const toe = box(4, 3.4, 24, M.chrome);
+      toe.position.set(68 + dx, 81.5, 70);
+      machine.add(toe);
+    });
+    const screw = cyl(4, 4, 6, M.steel, 16);
+    screw.rotation.z = Math.PI / 2;
+    screw.position.set(78, 118, 58);
+    machine.add(screw);
+
+    /* 노루발 올림 레버 */
+    const lifter = box(7, 6, 34, M.black);
+    lifter.position.set(70, 140, 26);
+    machine.add(lifter);
+
+    /* 실채기 — 페이스 플레이트의 세로 슬롯에서 핸드휠과 함께 오르내린다.
+       원래 옆면에 있어서 정면에서 보이지 않았다. */
+    const takeUpSlot = box(12, 58, 2, M.black);
+    takeUpSlot.position.set(48, 252, FACE + 0.3);
+    machine.add(takeUpSlot);
+
+    const takeUp = new THREE.Group();
+    const lever = box(22, 5, 4, M.chrome);
+    lever.position.x = -8;
+    const leverEye = new THREE.Mesh(new THREE.TorusGeometry(3, 1, 8, 16), M.chrome);
+    leverEye.position.x = -19;                          // 실이 지나가는 고리
+    takeUp.add(lever, leverEye);
+    takeUp.position.set(56, 252, FACE + 2.2);
+    machine.add(takeUp);
+
+    /* 윗실 장력 다이얼 */
+    const tension = cyl(15, 15, 12, M.grey, 28);
+    tension.rotation.x = Math.PI / 2;
+    tension.position.set(52, 196, FACE - 2);
+    machine.add(tension);
+
+    function tensionTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 160;
+      const g = c.getContext('2d');
+      g.translate(80, 80);
+      g.fillStyle = '#3a3a42';
+      g.font = '500 17px "IBM Plex Mono", monospace';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (let i = 0; i <= 9; i++) {
+        const a = -Math.PI * 0.8 + i * (Math.PI * 1.6 / 9);
+        g.fillText(String(i), Math.sin(a) * 58, -Math.cos(a) * 58);
+      }
+      g.fillStyle = '#d4362b';                           // 기준 눈금
+      g.fillRect(-2, -78, 4, 12);
+      return new THREE.CanvasTexture(c);
+    }
+    const tensionFace = plate(30, 30, tensionTexture(), 0);
+    tensionFace.position.set(52, 196, FACE + 4.2);
+    machine.add(tensionFace);
+
+    /* 실걸이 — 기둥이 오른쪽 끝에 서고 봉이 왼쪽으로 뻗는 ㄱ자.
+       실패는 왼쪽 열린 끝으로 끼우고, 깔대기가 마지막에 그 끝을 막는다. */
+    const spoolRig = new THREE.Group();
+    spoolRig.position.set(370, 296, 64);
+    machine.add(spoolRig);
+
+    const post = cyl(5, 5, 28, M.body, 16);          // 세로 기둥
+    post.position.y = 14;
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 12), M.body);
+    elbow.position.y = 26;                            // 꺾이는 모서리
+    const arm = cyl(4.6, 4.6, 88, M.body, 16);        // 가로 봉 — 왼쪽으로
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(-44, 26, 0);
+    spoolRig.add(post, elbow, arm);
+
+    /* 실패가 빠지지 않게 막는 깔대기 — 봉의 바깥쪽 끝(왼쪽)에 마지막으로 끼운다.
+       넓은 쪽(반지름 14)이 오른쪽 실패를 향하고 좁은 쪽이 바깥을 본다. */
+    const spoolCap = new THREE.Mesh(new THREE.CylinderGeometry(14, 6, 12, 24), M.grey);
+    spoolCap.rotation.z = -Math.PI / 2;
+    spoolCap.position.set(-80, 26, 0);
+    spoolRig.add(spoolCap);
+
+    /* 실패 + 재봉실 — 양 끝판 사이에 실이 감긴다 */
+    const spoolCore = cyl(9, 9, 42, M.grey, 24);
+    spoolCore.rotation.z = Math.PI / 2;
+    spoolCore.position.set(-48, 26, 0);
+    const threadWound = cyl(14.5, 14.5, 36, M.thread, 28);
+    threadWound.rotation.z = Math.PI / 2;
+    threadWound.position.set(-48, 26, 0);
+    spoolRig.add(spoolCore, threadWound);
+    [-27, -69].forEach(x => {
+      const flange = cyl(16, 16, 3, M.grey, 24);
+      flange.rotation.z = Math.PI / 2;
+      flange.position.set(x, 26, 0);
+      spoolRig.add(flange);
+    });
+
+    /* 밑실 감개 */
+    const winder = cyl(6, 6, 16, M.grey, 20);
+    winder.position.set(250, 304, 96);
+    machine.add(winder);
+    const winderStop = box(4, 12, 4, M.black);
+    winderStop.position.set(234, 302, 96);
+    machine.add(winderStop);
+
+    /* 실 가이드 고리 — 철제. 실이 여기를 지나 아래로 내려간다 */
+    const guidePost = cyl(2, 2, 15, M.chrome, 12);
+    guidePost.position.set(74, 306, 58);
+    machine.add(guidePost);
+    const guideHook = new THREE.Mesh(
+      new THREE.TorusGeometry(7, 1.7, 10, 22, Math.PI * 1.45), M.chrome
+    );
+    guideHook.position.set(74, 316, 58);
+    guideHook.rotation.set(0, Math.PI / 2, -0.55);
+    machine.add(guideHook);
+
+    const midGuide = cyl(2, 2, 13, M.chrome, 12);
+    midGuide.position.set(206, 306, 62);
+    machine.add(midGuide);
+
+    /* 실 — 실패에서 가이드를 지나 몸체 안으로 들어간다.
+       앞면 밖으로 나오던 구간은 잘라냈다(장력 다이얼 앞을 가로지르던 부분). */
+    const thread = new THREE.Mesh(
+      new THREE.TubeGeometry(
+        new THREE.CatmullRomCurve3([
+          new THREE.Vector3(322, 334, 64),
+          new THREE.Vector3(206, 314, 62),
+          new THREE.Vector3( 76, 317, 58),
+          new THREE.Vector3( 54, 286, 64)
+        ]),
+        90, 0.9, 6, false
+      ),
+      M.thread
+    );
+    machine.add(thread);
+
+    /* 우측면 전원부 + 통풍구 */
+    const RIGHT = 400 + BEV;
+    const rocker = box(5, 17, 27, M.black);
+    rocker.position.set(RIGHT, 122, 46);
+    machine.add(rocker);
+    const inlet = box(5, 26, 32, M.black);
+    inlet.position.set(RIGHT, 74, 46);
+    machine.add(inlet);
+    for (let i = 0; i < 7; i++) {
+      const vent = box(3, 3, 38, M.grey);
+      vent.position.set(RIGHT - 0.6, 62 + i * 11, 104);
+      machine.add(vent);
+    }
+
+    /* ════════════════ 디테일 ════════════════ */
+
+    /* 페이스 플레이트 — 헤드 앞을 덮는 떼어낼 수 있는 판. 둘레의 이음선이 보인다 */
+    const facePlate = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[0, 0], [70, 0], [70, 134], [0, 134]], [10, 10, 14, 14]),
+        { depth: 1.2, bevelEnabled: true, bevelThickness: .8, bevelSize: .8,
+          bevelOffset: 0, bevelSegments: 2, curveSegments: 10 }
+      ),
+      M.body
+    );
+    facePlate.position.set(33, 158, FACE - 0.4);
+    machine.add(facePlate);
+
+    /* 페이스 플레이트 나사 */
+    [[40, 286], [96, 286]].forEach(([x, y]) => {
+      const sc = cyl(2.6, 2.6, 1.2, M.steel, 14);
+      sc.rotation.x = Math.PI / 2;
+      sc.position.set(x, y, FACE + 1.8);
+      machine.add(sc);
+    });
+
+    /* 앞면으로 나온 윗실 — 장력 다이얼 → 실채기 고리 → 헤드 아래 → 바늘.
+       재봉틀이라는 걸 한눈에 알려 주는 선이라 앞으로 꺼내 보인다 */
+    const frontThread = new THREE.Mesh(
+      new THREE.TubeGeometry(
+        new THREE.CatmullRomCurve3([
+          new THREE.Vector3(58, 206, FACE + 5.6),
+          new THREE.Vector3(40, 252, FACE + 4.2),
+          new THREE.Vector3(44, 214, FACE + 3.6),
+          new THREE.Vector3(60, 158, FACE + 3.2),
+          new THREE.Vector3(63, 142, 144),
+          new THREE.Vector3(66, 120, 98),
+          new THREE.Vector3(68, 100, 80)
+        ]),
+        120, 0.8, 6, false
+      ),
+      M.thread
+    );
+    machine.add(frontThread);
+
+    /* 바늘 고정 나사 */
+    const clampScrew = cyl(2.4, 2.4, 5, M.steel, 12);
+    clampScrew.rotation.z = Math.PI / 2;
+    clampScrew.position.set(75, 99, 78);
+    machine.add(clampScrew);
+
+    /* 자동 실 꿰기 레버 — 바늘 왼쪽에 매달린 작은 레버 */
+    const threader = new THREE.Group();
+    const threaderBar = box(3.4, 30, 3.4, M.steel);
+    threaderBar.position.y = -15;
+    const threaderHook = box(10, 2.6, 2.6, M.steel);
+    threaderHook.position.set(4.5, -29, 0);
+    const threaderGrip = box(9, 6, 6, M.black);
+    threaderGrip.position.y = -2;
+    threader.add(threaderBar, threaderHook, threaderGrip);
+    threader.position.set(52, 150, 70);
+    machine.add(threader);
+
+    /* 실 커터 — 헤드 왼쪽 옆면 */
+    const cutter = box(3, 12, 7, M.steel);
+    cutter.position.set(26.4, 158, 128);
+    machine.add(cutter);
+    const cutterSlot = box(3.2, 5, 1.4, M.black);
+    cutterSlot.position.set(26.2, 160, 128);
+    machine.add(cutterSlot);
+
+    /* 노루발 압력 다이얼 — 상판 왼쪽 */
+    const pressure = cyl(10, 10, 9, M.grey, 28);
+    pressure.position.set(46, 306.5, 104);
+    machine.add(pressure);
+    const pressureCap = cyl(6.5, 6.5, 2.4, M.body, 24);
+    pressureCap.position.set(46, 312, 104);
+    machine.add(pressureCap);
+    const pressureMark = box(1.6, 0.8, 7, M.red);
+    pressureMark.position.set(46, 313.6, 104);
+    machine.add(pressureMark);
+
+    /* 손잡이 — 상판에 파묻힌 손잡이 */
+    const handleWell = box(128, 8, 46, M.dark);
+    handleWell.position.set(170, 298.6, 62);        // 베벨 때문에 윗면은 302
+    machine.add(handleWell);
+    const handleBar = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[0, 0], [112, 0], [112, 24], [0, 24]], [11, 11, 11, 11]),
+        { depth: 5, bevelEnabled: true, bevelThickness: 1, bevelSize: 1,
+          bevelOffset: 0, bevelSegments: 3, curveSegments: 10 }
+      ),
+      M.body
+    );
+    handleBar.rotation.x = -Math.PI / 2;               // 상판 위에 눕힌다
+    handleBar.position.set(114, 297.2, 74);
+    machine.add(handleBar);
+
+    /* 밑실 감개 장력 원판 */
+    [-2.4, 2.4].forEach(dz => {
+      const disc = cyl(7, 7, 1.6, M.chrome, 22);
+      disc.rotation.x = Math.PI / 2;
+      disc.position.set(222, 306, 96 + dz);
+      machine.add(disc);
+    });
+    const winderGuidePost = cyl(1.6, 1.6, 12, M.chrome, 10);
+    winderGuidePost.position.set(222, 303, 96);
+    machine.add(winderGuidePost);
+
+    /* 핸드휠 — 바깥 링과 안쪽 원판에 홈을 판다 */
+    [[44, 24.2], [28, 27.2]].forEach(([r, y]) => {
+      const groove = new THREE.Mesh(new THREE.TorusGeometry(r, 1.2, 8, 72), M.black);
+      groove.rotation.x = Math.PI / 2;
+      groove.position.y = y;
+      wheelSpin.add(groove);
+    });
+    const hubRing = new THREE.Mesh(new THREE.TorusGeometry(11, 1.6, 10, 36), M.chrome);
+    hubRing.rotation.x = Math.PI / 2;
+    hubRing.position.y = 27.4;
+    wheelSpin.add(hubRing);
+
+    /* 작업등 — 헤드 밑면에서 바늘 주위를 비춘다 */
+    const workLight = new THREE.Mesh(
+      new THREE.PlaneGeometry(26, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfffbef })
+    );
+    workLight.rotation.x = Math.PI / 2;                // 아래를 향하게
+    workLight.position.set(86, 149.6, 92);
+    machine.add(workLight);
+
+    /* 모델명 — 명판 위에 작게 */
+    function modelNameTexture() {
+      const c = document.createElement('canvas');
+      c.width = 440; c.height = 60;
+      const g = c.getContext('2d');
+      g.fillStyle = '#6a6a72';
+      g.font = '500 38px "IBM Plex Sans KR", sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('eXperience 450', 220, 32);
+      return new THREE.CanvasTexture(c);
+    }
+    const modelName = plate(66, 9, modelNameTexture(), 0);
+    modelName.position.set(348, 63, FACE + 0.6);
+    machine.add(modelName);
+
+    /* 보조테이블 손가락 홈 */
+    const accessoryGrip = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        roundedShape([[0, 0], [40, 0], [40, 7], [0, 7]], [3.5, 3.5, 3.5, 3.5]),
+        { depth: 1, bevelEnabled: false, curveSegments: 8 }
+      ),
+      M.dark
+    );
+    accessoryGrip.position.set(76, 60, FACE - 0.6);
+    machine.add(accessoryGrip);
+
+    /* 고무발 — 바닥 네 귀퉁이 */
+    [[44, 16], [44, 136], [356, 16], [356, 136]].forEach(([x, z]) => {
+      const foot = cyl(9, 10, 5, M.black, 20);
+      foot.position.set(x, -9, z);
+      machine.add(foot);
+    });
+
+
+    machine.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    /* 핸드휠 각도 하나가 모든 움직임을 정한다 */
+    const STROKE = 33;
+    let wheelAngle = 0;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return {
+      machine,
+      update(dt) {
+        if (!still) wheelAngle += dt * sewSpeed;
+        wheelSpin.rotation.y = -wheelAngle;
+        needleRig.position.y = -STROKE * (1 - Math.cos(wheelAngle)) / 2;
+        takeUp.rotation.z = 0.42 * Math.cos(wheelAngle);
+      }
+    };
+}

@@ -246,7 +246,7 @@ export function createButtonRig(THREE, scene, model, { x = 0, z = 0, size = 1, s
         sweep = Math.min(sweep + dt / .75, 1);
         const e = sweep * sweep * (3 - 2 * sweep);
         sweepLight.position.set(x + (-1.6 + e * 3.2) * size, 1.1 * size, z + (-1 + e * 2) * size);
-        sweepLight.intensity = Math.sin(sweep * Math.PI) * 9;
+        sweepLight.intensity = Math.sin(sweep * Math.PI) * 9 * size ** 1.6;   // 거리가 size 배로 멀어진 만큼 세게
         if (sweep >= 1) { sweep = 0; sweepLight.intensity = 0; }
       }
       return sweep > 0 || !Object.values(S).every(settled);
