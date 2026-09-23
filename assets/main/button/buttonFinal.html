@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Button 3D · Final</title>
+
+<!--
+  단추 3D 확인용 페이지. 모델과 인터랙션은 buttonModels.js 에 있다.
+  주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.
+-->
+
+<style>
+  :root { --black: #171413; --faint: rgba(238, 234, 226, .42); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--black);
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+  }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .caption {
+    position: fixed; left: 50%; bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); margin: 0;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); pointer-events: none; white-space: nowrap;
+  }
+</style>
+
+<div id="stage"></div>
+<p class="caption">hover a button</p>
+
+<script type="module">
+  import { createRedButton, createCreamButton, createButtonRig } from './buttonFinal.js';
+
+  const stage = document.getElementById('stage');
+  const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(28, 1, .1, 100);
+  camera.position.set(0, 9.2, 5.4);                    // 책상을 위에서 비스듬히 — 메인 화면 구도
+  camera.lookAt(0, 0, .2);
+
+  /* 스튜디오 반사 — 밝은 띠 하나가 매끈한 광을 만든다 */
+  (function environment() {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#2a2624'); gr.addColorStop(.30, '#fff8ee');
+    gr.addColorStop(.36, '#8a8480'); gr.addColorStop(.60, '#1c1918');
+    gr.addColorStop(1, '#0a0909');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromEquirectangular(tex).texture;
+    pm.dispose(); tex.dispose();
+  })();
+  scene.add(new THREE.AmbientLight(0xffffff, .15));
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
+  key.position.set(-3, 6, 2);
+  scene.add(key);
+
+  /* 레퍼런스 배치 — 큰 빨강이 위, 작은 크림이 오른쪽 아래 */
+  const rigs = [
+    createButtonRig(THREE, scene, createRedButton(THREE),   { x: -.55, z: -.35, size: 1.15, spin: .3 }),
+    createButtonRig(THREE, scene, createCreamButton(THREE), { x: 1.15, z: .95,  size: .78,  spin: 1.1 })
+  ];
+
+  /* ── 호버 ── */
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let hovered = null;
+  let dirty = true;                                    // 다시 그릴 일이 있을 때만 그린다
+
+  stage.addEventListener('pointermove', ev => {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    let hit = null;
+    for (const rig of rigs) {
+      const h = ray.intersectObject(rig.group, true)[0];
+      if (h && (!hit || h.distance < hit.d)) hit = { rig, d: h.distance, p: h.point };
+    }
+    const next = hit ? hit.rig : null;
+    if (next !== hovered) {
+      hovered?.setHover(false);
+      next?.setHover(true);
+      hovered = next;
+      stage.style.cursor = next ? 'pointer' : 'default';
+    }
+    if (hit) hit.rig.lean(hit.p);
+    dirty = true;
+  });
+  stage.addEventListener('pointerleave', () => { hovered?.setHover(false); hovered = null; dirty = true; });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 1 ? 28 / Math.max(w / h, .55) : 28;   // 세로 화면에서도 둘 다 보이게
+    camera.updateProjectionMatrix();
+    dirty = true;
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  let prev = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - prev) / 1000, 1 / 30);
+    prev = now;
+    let moving = false;
+    for (const rig of rigs) moving = rig.update(dt) || moving;
+    if (moving || dirty) { renderer.render(scene, camera); dirty = false; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>

@@ -1,0 +1,215 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Thread Texture Painter</title>
+<style>body{margin:0;background:#111;color:#ccc;font:12px monospace} canvas{display:block;max-width:100%}</style>
+<p id="msg">painting…</p>
+<canvas id="color"></canvas>
+<canvas id="bump"></canvas>
+<script>
+/*
+  실패 몸통용 실 텍스처를 그린다. 열면 그림이 나오고 위쪽 링크로 두 파일을 내려받는다.
+  결과물: threadSpool/threadWound.webp (색), threadSpool/threadWoundBump.webp (요철)
+  바꾸기 좋은 값 — paint() 안의 family(기울기, 개수): 개수가 적을수록 가닥 간격이 넓다.
+  가로 = 둘레 한 바퀴(좌우 끝이 이어진다), 세로 = 실 감긴 길이.
+  바탕: 거의 둘레 방향으로 촘촘히 감긴 꼰 실
+  위층: 가닥 여러 개가 한 묶음(띠)으로 나란히, 띠들이 여러 방향으로 겹겹이 — 뜨개실 공처럼
+*/
+const W = 2048, H = 1024;
+
+function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+/* 줄 번호로 정해지는 난수 — 가로로 한 바퀴 돌아 이어지는 줄끼리 같은 값을 갖게 */
+const hash = n => { let x = Math.sin(n * 127.1 + 11.7) * 43758.5453; return x - Math.floor(x); };
+
+/* 줄 하나: y = y0 + slope·x. 가로로 W 만큼 가면 slope·W = count·gap 만큼 내려와
+   count 번째 뒤의 줄과 정확히 이어진다. 그래서 줄의 성질은 (번호 mod count)로 정한다 */
+function family(slope, count) {
+  const gap = Math.abs(slope * W) / count;
+  const lines = [];
+  const n0 = Math.floor((-Math.abs(slope) * W - 40) / gap), n1 = Math.ceil((H + Math.abs(slope) * W + 40) / gap);
+  for (let i = n0; i <= n1; i++) {
+    const k = ((i % count) + count) % count;
+    lines.push({ y0: i * gap, k });
+  }
+  return { slope, gap, count, lines };
+}
+
+/* 가닥 경로 — 가로로 주기 W 인 잔물결 */
+function strandPath(g, fam, line, amp, waves) {
+  const ph = hash(line.k * 3.1 + fam.slope) * Math.PI * 2;
+  g.beginPath();
+  for (let x = -24; x <= W + 24; x += 6) {
+    const y = line.y0 + fam.slope * x + Math.sin(x / W * Math.PI * 2 * waves + ph) * amp;
+    x === -24 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+}
+
+function paintStrand(g, fam, line, width, style) {
+  const v = hash(line.k * 7.3 + fam.slope * 13);           // 가닥마다 밝기·굵기가 조금씩 다르다
+  const w = width * (.85 + v * .3);
+  const amp = 1 + hash(line.k * 5.9) * 2.2;
+  const waves = 2 + Math.floor(hash(line.k * 2.3) * 4);
+
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  if (style.shadow) {                                       // 위층 가닥이 아래층에 드리우는 그림자
+    g.save(); g.translate(0, w * .35);
+    strandPath(g, fam, line, amp, waves);
+    g.strokeStyle = style.shadow; g.lineWidth = w * 1.5; g.filter = 'blur(3px)'; g.stroke();
+    g.restore(); g.filter = 'none';
+  }
+  strandPath(g, fam, line, amp, waves);
+  g.strokeStyle = style.edge; g.lineWidth = w + 1.5; g.stroke();
+  strandPath(g, fam, line, amp, waves);
+  g.strokeStyle = style.body(v); g.lineWidth = w; g.stroke();
+
+  /* 빛 받는 윗면 */
+  g.save(); g.translate(0, -w * .18);
+  strandPath(g, fam, line, amp, waves);
+  g.strokeStyle = style.hi; g.globalAlpha = .35 + v * .35; g.lineWidth = w * .32; g.stroke();
+  g.restore(); g.globalAlpha = 1;
+
+  /* 꼬임 결 — 가닥을 비스듬히 가로지르는 짧은 선. 간격이 W 를 나누어떨어져 이어진다 */
+  const ph = hash(line.k * 3.1 + fam.slope) * Math.PI * 2;
+  g.strokeStyle = style.twist; g.lineWidth = Math.max(1, w * .14);
+  for (let x = 0; x < W; x += 8) {
+    const y = line.y0 + fam.slope * x + Math.sin(x / W * Math.PI * 2 * waves + ph) * amp;
+    g.beginPath(); g.moveTo(x - w * .25, y - w * .42); g.lineTo(x + w * .25, y + w * .42); g.stroke();
+  }
+}
+
+/* 곡선 위 점들을 따라 가닥 하나를 그린다 — 둥근 몸통, 빛 받는 윗면, 꼬임 결.
+   점은 6px 간격으로 촘촘해야 꺾인 마디가 안 보인다 */
+function strandAlong(g, pts, w, v, style) {
+  const trace = (dx = 0, dy = 0) => {
+    g.beginPath();
+    pts.forEach((p, i) => i ? g.lineTo(p[0] + dx, p[1] + dy) : g.moveTo(p[0] + dx, p[1] + dy));
+  };
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  trace(); g.strokeStyle = style.edge; g.lineWidth = w + 1.2; g.stroke();
+  trace(); g.strokeStyle = style.body(v); g.lineWidth = w; g.stroke();
+  trace(0, -w * .18); g.globalAlpha = .3 + v * .35;
+  g.strokeStyle = style.hi; g.lineWidth = w * .3; g.stroke(); g.globalAlpha = 1;
+
+  /* 꼬임 결 — 곡선 전체 길이를 따라 일정한 간격으로. 마디마다 새로 시작하지 않는다 */
+  g.strokeStyle = style.twist; g.lineWidth = Math.max(1, w * .14);
+  const STEP = 7;
+  let carry = 0;
+  g.beginPath();
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (!len) continue;
+    const tx = (x1 - x0) / len, ty = (y1 - y0) / len;
+    for (let t = carry; t < len; t += STEP) {
+      const x = x0 + tx * t, y = y0 + ty * t;
+      g.moveTo(x - tx * w * .3 - ty * w * .42, y - ty * w * .3 + tx * w * .42);
+      g.lineTo(x + tx * w * .3 + ty * w * .42, y + ty * w * .3 - tx * w * .42);
+      carry = t + STEP - len;
+    }
+    if (carry < 0) carry += STEP;
+  }
+  g.stroke();
+}
+
+/* 띠 한 묶음을 따로 그린 뒤, 양 끝이 서서히 사라지게 가려서 합친다.
+   끝이 뚝 잘리지 않고 다른 실 밑으로 파고드는 것처럼 보인다 */
+let layer = null;
+function band(g, r, style, shadow) {
+  if (!layer) { layer = document.createElement('canvas'); layer.width = W; layer.height = H; }
+  const lg = layer.getContext('2d');
+
+  const cx = r() * W, cy = r() * H;
+  const sign = r() < .5 ? -1 : 1;
+  const ang = sign * (.25 + r() * r() * 1.1);                 // 대부분 완만한 사선, 가끔 가파르게
+  const len = 1600 + r() * 1600;
+  const bend = (r() - .5) * .5;                               // 휘는 정도
+  const n = 6 + Math.floor(r() * 9), gap = 11 + r() * 2;
+  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+  const steps = Math.ceil(len / 6);
+  const strands = [];
+  for (let s = 0; s < n; s++) {
+    const off = (s - (n - 1) / 2) * gap;
+    const v = r(), w = 11 + v * 3;
+    const pts = [];
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps - .5;
+      const along = t * len, curve = bend * len * (t * t - .25);   // 활처럼 휜다
+      pts.push([cx + dx * along + nx * (off + curve), cy + dy * along + ny * (off + curve)]);
+    }
+    strands.push({ pts, w, v });
+  }
+
+  for (const ox of [0, -W, W]) {                              // 좌우로 이어지게
+    const x0 = cx + ox - len / 2 - 100, x1 = cx + ox + len / 2 + 100;
+    if (x1 < 0 || x0 > W) continue;                           // 화면에 안 걸리는 사본은 건너뛴다
+    lg.clearRect(0, 0, W, H);
+    lg.save(); lg.translate(ox, 0);
+    for (const st of strands) strandAlong(lg, st.pts, st.w, st.v, style);
+    lg.restore();
+
+    /* 양 끝 18% 구간을 서서히 투명하게 */
+    const ax = cx + ox - dx * len / 2, ay = cy - dy * len / 2;
+    const bx = cx + ox + dx * len / 2, by = cy + dy * len / 2;
+    const mask = lg.createLinearGradient(ax, ay, bx, by);
+    mask.addColorStop(0, 'rgba(0,0,0,0)'); mask.addColorStop(.18, 'rgba(0,0,0,1)');
+    mask.addColorStop(.82, 'rgba(0,0,0,1)'); mask.addColorStop(1, 'rgba(0,0,0,0)');
+    lg.globalCompositeOperation = 'destination-in';
+    lg.fillStyle = mask; lg.fillRect(0, 0, W, H);
+    lg.globalCompositeOperation = 'source-over';
+
+    /* 띠 모양 그대로 아래로 그림자를 떨어뜨리며 합친다 */
+    g.filter = 'drop-shadow(0 5px 4px ' + shadow + ')';
+    g.drawImage(layer, 0, 0);
+    g.filter = 'none';
+  }
+}
+
+function paint(canvas, pal) {
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+  g.fillStyle = pal.void; g.fillRect(0, 0, W, H);
+  const style = { edge: pal.edge, body: pal.body, hi: pal.hi, twist: pal.twist };
+
+  /* 맨 아래 — 둘레 방향으로 감긴 바탕. 띠 사이로 살짝 보인다 */
+  const base1 = family(.04, 6);
+  for (const l of base1.lines) paintStrand(g, base1, l, 12.5, style);
+
+  /* 그 위 — 뜨개실 공처럼 여러 방향의 띠가 겹겹이 */
+  const r = rng(17);
+  for (let k = 0; k < 76; k++) band(g, r, style, pal.shadow);
+
+  /* 잔털 — 좌우로 한 번씩 더 그려 이음선이 없게 */
+  const rf = rng(9);
+  g.lineWidth = .8;
+  for (let i = 0; i < 5000; i++) {
+    const x = rf() * W, y = rf() * H, a = (rf() - .5) * .8, l = 3 + rf() * 7;
+    g.strokeStyle = pal.fuzz(rf());
+    for (const ox of [0, -W, W]) {
+      g.beginPath(); g.moveTo(x + ox, y); g.quadraticCurveTo(x + ox + l * .5, y + a * l + 1.5, x + ox + l, y + a * l); g.stroke();
+    }
+  }
+}
+
+const color = document.getElementById('color'), bump = document.getElementById('bump');
+paint(color, {
+  void: '#1c0103', edge: 'rgba(40,2,6,.8)', shadow: 'rgba(0,0,0,.4)', twist: 'rgba(40,0,4,.45)', hi: '#e2525b',
+  body: v => `rgb(${120 + v * 45 | 0},${10 + v * 8 | 0},${18 + v * 8 | 0})`,
+  fuzz: v => `rgba(230,90,96,${.05 + v * .12})`
+});
+paint(bump, {
+  void: '#000', edge: '#1a1a1a', shadow: 'rgba(0,0,0,.6)', twist: 'rgba(0,0,0,.5)', hi: '#fff',
+  body: v => { const c = 150 + v * 60 | 0; return `rgb(${c},${c},${c})`; },
+  fuzz: v => `rgba(255,255,255,${.05 + v * .1})`
+});
+
+/* 다 그리면 내려받기 링크를 띄운다. 받은 두 파일을 threadSpool 폴더의 같은 이름 파일과 바꾸면 된다 */
+const msg = document.getElementById('msg');
+msg.textContent = '';
+const link = (c, name, q) => c.toBlob(b => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = name; a.textContent = '⬇ ' + name;
+  a.style.cssText = 'color:#eee;margin-right:16px';
+  msg.appendChild(a);
+}, 'image/webp', q);
+link(color, 'threadWound.webp', .8);
+link(bump, 'threadWoundBump.webp', .6);
+</script>

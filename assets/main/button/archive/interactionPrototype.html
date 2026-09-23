@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Interaction Prototype</title>
+
+<!--
+  메인 화면 인터랙션 비교 시안
+    왼쪽  단추 — 3D (Three.js)   들리면서 기울고, 빛이 표면을 쓸고 지나간다
+    오른쪽 쪽가위 — 2D (SVG)     캡이 립스틱처럼 빠지고, 날이 두 번 싹둑한다
+
+  배경 이미지에서 물건을 오려낸 소스가 아직 없어서 둘 다 코드로 그렸다.
+  주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.
+-->
+
+<style>
+  :root {
+    --black: #171413;
+    --red:   #7A0706;
+    --cream: #EEEAE2;
+    --faint: rgba(238, 234, 226, .42);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background-color: var(--black);
+    /* 책상 표면의 미세한 결 */
+    background-image:
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.05), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    color: var(--cream);
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .desk {
+    height: 100dvh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .spot {
+    position: relative;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  .caption {
+    position: absolute;
+    left: 50%;
+    bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    margin: 0;
+    text-align: center;
+    font-size: 10.5px;
+    line-height: 1.9;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .caption b { color: var(--cream); font-weight: 500; }
+
+  #buttonStage { position: absolute; inset: 0; }
+  #buttonStage canvas { display: block; width: 100%; height: 100%; }
+
+  .snips {
+    width: min(88%, 640px);
+    height: auto;
+    overflow: visible;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 760px) {
+    .desk { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    .caption { bottom: 14px; }
+  }
+</style>
+
+<main class="desk">
+  <section class="spot" aria-label="3D 단추">
+    <div id="buttonStage"></div>
+    <p class="caption"><b>Button</b> · 3D · WebGL<br>hover to lift</p>
+  </section>
+
+  <section class="spot" aria-label="2D 쪽가위">
+    <svg class="snips" id="snips" viewBox="-80 -150 460 300" role="img" aria-label="쪽가위">
+      <defs>
+        <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"   stop-color="#f4f4f6"/>
+          <stop offset=".45" stop-color="#b9bac0"/>
+          <stop offset=".55" stop-color="#8d8e95"/>
+          <stop offset="1"   stop-color="#d6d7dc"/>
+        </linearGradient>
+        <linearGradient id="grip" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"  stop-color="#a3100e"/>
+          <stop offset=".5" stop-color="#7A0706"/>
+          <stop offset="1"  stop-color="#4a0403"/>
+        </linearGradient>
+        <linearGradient id="capFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"   stop-color="#fbf9f5"/>
+          <stop offset=".55" stop-color="#e6e1d7"/>
+          <stop offset="1"   stop-color="#c9c3b7"/>
+        </linearGradient>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="7"/>
+        </filter>
+      </defs>
+
+      <!-- 그림자는 물건과 따로 움직여야 '들리는' 느낌이 난다 -->
+      <g id="shadowLayer" filter="url(#soft)" opacity=".55">
+        <g id="snipsShadow">
+          <rect x="10" y="-26" width="300" height="52" rx="24" fill="#000"/>
+        </g>
+        <rect id="capShadow" x="182" y="-24" width="128" height="48" rx="16" fill="#000"/>
+      </g>
+
+      <g id="body">
+        <!-- 뒤쪽 스프링 — 두 날을 이어 주는 강철 고리 -->
+        <path d="M30,-14 C-20,-16 -20,16 30,14" fill="none" stroke="url(#steel)" stroke-width="6" stroke-linecap="round"/>
+
+        <!-- 위 날 -->
+        <g id="armTop">
+          <path d="M184,-12 L302,-1.2 L302,0 L184,0 Z" fill="url(#steel)"/>
+          <path d="M184,-12 L302,-1.2" stroke="#fff" stroke-opacity=".6" stroke-width="1"/>
+          <rect x="22" y="-29" width="170" height="26" rx="13" fill="url(#grip)"/>
+          <rect x="34" y="-26" width="140" height="5" rx="2.5" fill="#fff" opacity=".22"/>
+          <g stroke="#2a0201" stroke-opacity=".45" stroke-width="2" stroke-linecap="round">
+            <line x1="70" y1="-20" x2="70" y2="-10"/><line x1="80" y1="-20" x2="80" y2="-10"/>
+            <line x1="90" y1="-20" x2="90" y2="-10"/><line x1="100" y1="-20" x2="100" y2="-10"/>
+            <line x1="110" y1="-20" x2="110" y2="-10"/><line x1="120" y1="-20" x2="120" y2="-10"/>
+          </g>
+        </g>
+
+        <!-- 아래 날 -->
+        <g id="armBottom">
+          <path d="M184,12 L302,1.2 L302,0 L184,0 Z" fill="url(#steel)"/>
+          <rect x="22" y="3" width="170" height="26" rx="13" fill="url(#grip)"/>
+          <rect x="34" y="6" width="140" height="5" rx="2.5" fill="#fff" opacity=".14"/>
+          <g stroke="#2a0201" stroke-opacity=".45" stroke-width="2" stroke-linecap="round">
+            <line x1="70" y1="10" x2="70" y2="20"/><line x1="80" y1="10" x2="80" y2="20"/>
+            <line x1="90" y1="10" x2="90" y2="20"/><line x1="100" y1="10" x2="100" y2="20"/>
+            <line x1="110" y1="10" x2="110" y2="20"/><line x1="120" y1="10" x2="120" y2="20"/>
+          </g>
+        </g>
+
+        <!-- 캡 — 립스틱 뚜껑처럼 날 끝을 덮는다 -->
+        <g id="cap">
+          <rect x="182" y="-24" width="128" height="48" rx="16" fill="url(#capFill)"/>
+          <rect x="190" y="-20" width="112" height="8" rx="4" fill="#fff" opacity=".7"/>
+          <rect x="182.5" y="-23.5" width="127" height="47" rx="15.5" fill="none" stroke="#000" stroke-opacity=".12"/>
+          <line x1="198" y1="-24" x2="198" y2="24" stroke="#000" stroke-opacity=".08" stroke-width="2"/>
+        </g>
+      </g>
+    </svg>
+    <p class="caption"><b>Thread snips</b> · 2D · SVG<br>hover to open</p>
+  </section>
+</main>
+
+<script type="module">
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── 공통 — 스프링. 목표값을 바꾸면 알아서 따라가며 살짝 튕긴다 ── */
+  function spring(value, stiffness = 170, damping = 18) {
+    return { value, target: value, v: 0, stiffness, damping };
+  }
+  function stepSpring(s, dt) {
+    if (reduceMotion) { s.value = s.target; s.v = 0; return; }
+    const a = s.stiffness * (s.target - s.value) - s.damping * s.v;
+    s.v += a * dt;
+    s.value += s.v * dt;
+  }
+
+  /* ════════════════ 2D 쪽가위 ════════════════ */
+  const svg       = document.getElementById('snips');
+  const body      = document.getElementById('body');
+  const armTop    = document.getElementById('armTop');
+  const armBottom = document.getElementById('armBottom');
+  const cap       = document.getElementById('cap');
+  const snipsShadow = document.getElementById('snipsShadow');
+  const capShadow = document.getElementById('capShadow');
+
+  const TILT = -24;                                   // 책상 위에 비스듬히 놓인 각도
+  const S = {
+    capX:  spring(0, 120, 16),                        // 캡이 빠지는 거리
+    capR:  spring(0, 120, 14),
+    open:  spring(0, 420, 20),                        // 날 벌어짐 — 빠르고 단단하게
+    lift:  spring(0, 150, 15),                        // 들림
+    jolt:  spring(0, 600, 14)                         // 움찔
+  };
+
+  let snipTimers = [];
+  function clearSnip() { snipTimers.forEach(clearTimeout); snipTimers = []; }
+
+  function snipsEnter() {
+    clearSnip();
+    S.jolt.v += 90;                                   // 손이 닿는 순간 움찔
+    S.lift.target = 1;
+    S.capX.target = 118;
+    S.capR.target = 7;
+    /* 캡이 빠진 뒤 두 번 싹둑 */
+    const seq = [[380, 1], [520, 0], [640, 1], [780, 0]];
+    seq.forEach(([t, v]) => snipTimers.push(setTimeout(() => { S.open.target = v; }, t)));
+  }
+  function snipsLeave() {
+    clearSnip();
+    S.open.target = 0;
+    S.lift.target = 0;
+    snipTimers.push(setTimeout(() => { S.capX.target = 0; S.capR.target = 0; }, 120));
+  }
+
+  svg.addEventListener('pointerenter', snipsEnter);
+  svg.addEventListener('pointerleave', snipsLeave);
+  /* 호버가 없는 터치 화면에서는 탭으로 번갈아 */
+  let snipsOn = false;
+  svg.addEventListener('pointerup', ev => {
+    if (ev.pointerType === 'mouse') return;
+    snipsOn = !snipsOn;
+    snipsOn ? snipsEnter() : snipsLeave();
+  });
+
+  function renderSnips() {
+    const lift = S.lift.value;
+    const tilt = TILT + S.jolt.value * 0.05;
+    const scale = 1 + lift * 0.035;
+    body.setAttribute('transform',
+      `translate(0 ${-lift * 6}) rotate(${tilt} 150 0) scale(${scale})`);
+
+    const a = S.open.value * 11;                      // 최대 11도
+    armTop.setAttribute('transform', `rotate(${-a} 6 0)`);
+    armBottom.setAttribute('transform', `rotate(${a} 6 0)`);
+    cap.setAttribute('transform',
+      `translate(${S.capX.value} ${S.capX.value * 0.05}) rotate(${S.capR.value} 246 0)`);
+
+    /* 그림자는 들린 만큼 멀어지고 흐려진다 */
+    const off = 8 + lift * 16;
+    snipsShadow.setAttribute('transform',
+      `translate(${off * .6} ${off}) rotate(${tilt} 150 0) scale(${scale})`);
+    capShadow.setAttribute('transform',
+      `translate(${off * .6} ${off}) rotate(${tilt} 150 0) translate(${S.capX.value} 0) rotate(${S.capR.value} 246 0)`);
+    shadowLayer.setAttribute('opacity', (0.55 - lift * 0.2).toFixed(3));
+  }
+  const shadowLayer = document.getElementById('shadowLayer');
+
+  /* ════════════════ 3D 단추 ════════════════ */
+  const stage = document.getElementById('buttonStage');
+  let THREE = null;
+  try {
+    THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+  } catch (e) {
+    stage.innerHTML = '<p class="caption" style="bottom:50%">3D를 불러오지 못했습니다</p>';
+  }
+
+  let renderButtons = () => {};
+
+  if (THREE) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    stage.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+    camera.position.set(0.15, 9.6, 6);                 // 위에서 비스듬히 — 메인 화면 구도
+    camera.lookAt(0.15, 0, 0.1);
+
+    /* 스튜디오 반사 — 밝은 띠가 있어야 매끈한 광이 선다 */
+    (function environment() {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 256;
+      const g = c.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, 0, 256);
+      gr.addColorStop(0.00, '#2a2624');
+      gr.addColorStop(0.30, '#fff8ee');
+      gr.addColorStop(0.36, '#8a8480');
+      gr.addColorStop(0.60, '#1c1918');
+      gr.addColorStop(1.00, '#0a0909');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+      const tex = new THREE.CanvasTexture(c);
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      const pm = new THREE.PMREMGenerator(renderer);
+      scene.environment = pm.fromEquirectangular(tex).texture;
+      pm.dispose(); tex.dispose();
+    })();
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+    const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
+    key.position.set(-3, 6, 2);
+    scene.add(key);
+    /* 호버할 때 단추 위를 가로지르는 빛 — 광이 흐르는 효과의 핵심 */
+    const sweep = new THREE.PointLight(0xffffff, 0, 6, 1.6);
+    scene.add(sweep);
+
+    /* 단추 모양 — 구멍 4개 뚫린 원판 + 도톰한 테두리 */
+    function buttonGeometry() {
+      const shape = new THREE.Shape();
+      shape.absarc(0, 0, 1, 0, Math.PI * 2, false);
+      [[-.22, -.22], [.22, -.22], [.22, .22], [-.22, .22]].forEach(([x, y]) => {
+        const h = new THREE.Path();
+        h.absarc(x, y, .12, 0, Math.PI * 2, true);
+        shape.holes.push(h);
+      });
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: .12, bevelEnabled: true, bevelThickness: .1, bevelSize: .1,
+        bevelSegments: 10, curveSegments: 64
+      });
+      geo.rotateX(-Math.PI / 2);                      // 눕혀서 윗면이 +Y
+      return geo;
+    }
+    const baseGeo = buttonGeometry();
+    const rimGeo = new THREE.TorusGeometry(.84, .12, 24, 96);
+    rimGeo.rotateX(Math.PI / 2);
+
+    /* 바닥 그림자 — 방사형 그라데이션 한 장. 들린 높이에 따라 커지고 옅어진다 */
+    const shadowTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const g = c.getContext('2d');
+      const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      r.addColorStop(0, 'rgba(0,0,0,.9)');
+      r.addColorStop(.55, 'rgba(0,0,0,.45)');
+      r.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    })();
+
+    function makeButton(color, x, z, size, spin0) {
+      const mat = new THREE.MeshPhysicalMaterial({
+        color, roughness: .32, metalness: 0,
+        clearcoat: 1, clearcoatRoughness: .06, sheen: .2
+      });
+      const group = new THREE.Group();
+      const pivot = new THREE.Group();                // 기울기는 여기, 들림은 group
+      const base = new THREE.Mesh(baseGeo, mat);
+      const rim = new THREE.Mesh(rimGeo, mat);
+      rim.position.y = .2;
+      pivot.add(base, rim);
+      pivot.rotation.y = spin0;
+      group.add(pivot);
+      group.position.set(x, 0, z);
+      group.scale.setScalar(size);
+      scene.add(group);
+
+      const shadow = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.9, 2.9),
+        new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+      );
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(x + .08, -.12, z + .12);
+      shadow.scale.setScalar(size);
+      scene.add(shadow);
+
+      return {
+        group, pivot, shadow, size, x, z, spin0,
+        lift: spring(0, 140, 13),
+        tx: spring(0, 120, 12), tz: spring(0, 120, 12),
+        spin: spring(0, 60, 11),
+        sweep: 0
+      };
+    }
+
+    const buttons = [
+      makeButton(0x7a0706, -.9,  .15, 1.05, .3),
+      makeButton(0x1e1b1a, 1.25, -.5, .78, 1.1)
+    ];
+
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let hovered = null;
+    let pointerLocal = new THREE.Vector2();
+
+    function pick(ev) {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      let hit = null;
+      for (const b of buttons) {
+        const hits = ray.intersectObject(b.group, true);
+        if (hits.length && (!hit || hits[0].distance < hit.d)) hit = { b, d: hits[0].distance, p: hits[0].point };
+      }
+      return hit;
+    }
+
+    function setHover(b) {
+      if (hovered === b) return;
+      if (hovered) { hovered.lift.target = 0; hovered.tx.target = 0; hovered.tz.target = 0; hovered.spin.target = 0; }
+      hovered = b;
+      if (b) {
+        b.lift.target = 1;
+        b.spin.target = .5;                           // 들리면서 살짝 돈다
+        b.sweep = 0.0001;                             // 빛 지나가기 시작
+      }
+      stage.style.cursor = b ? 'pointer' : 'default';
+    }
+
+    stage.addEventListener('pointermove', ev => {
+      const hit = pick(ev);
+      setHover(hit ? hit.b : null);
+      if (hit) {
+        /* 커서 쪽으로 단추가 살짝 기운다 */
+        hit.b.tx.target = THREE.MathUtils.clamp((hit.p.z - hit.b.z) * .35, -.28, .28);
+        hit.b.tz.target = THREE.MathUtils.clamp(-(hit.p.x - hit.b.x) * .35, -.28, .28);
+      }
+    });
+    stage.addEventListener('pointerleave', () => setHover(null));
+
+    function resize() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      /* 좁은 화면에서도 두 단추가 다 들어오게 */
+      camera.fov = w / h < 1 ? 28 / Math.max(w / h, .55) : 28;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(stage);
+    resize();
+
+    renderButtons = dt => {
+      let sweepOn = 0;
+      for (const b of buttons) {
+        stepSpring(b.lift, dt); stepSpring(b.tx, dt); stepSpring(b.tz, dt); stepSpring(b.spin, dt);
+        const l = b.lift.value;
+        b.group.position.y = l * .42 * b.size;
+        b.pivot.rotation.x = b.tx.value;
+        b.pivot.rotation.z = b.tz.value;
+        b.pivot.rotation.y = b.spin0 + b.spin.value;
+        b.shadow.scale.setScalar(b.size * (1 + l * .45));
+        b.shadow.material.opacity = .85 - l * .45;
+        b.shadow.position.x = b.x + .08 + l * .25;
+        b.shadow.position.z = b.z + .12 + l * .3;
+
+        if (b.sweep > 0 && !reduceMotion) {
+          b.sweep = Math.min(b.sweep + dt / .75, 1);
+          const t = b.sweep, e = t * t * (3 - 2 * t);
+          sweep.position.set(b.x + (-1.6 + e * 3.2) * b.size, 1.1, b.z + (-1 + e * 2) * b.size);
+          sweepOn = Math.sin(t * Math.PI) * 9;
+          if (t >= 1) b.sweep = 0;
+        }
+      }
+      sweep.intensity = sweepOn;
+      renderer.render(scene, camera);
+    };
+  }
+
+  /* ── 루프 ── */
+  let prev = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - prev) / 1000, 1 / 30);
+    prev = now;
+    Object.values(S).forEach(s => stepSpring(s, dt));
+    renderSnips();
+    renderButtons(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
