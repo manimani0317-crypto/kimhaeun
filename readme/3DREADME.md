@@ -78,8 +78,9 @@
 ```
 kimhaeun/
 ├─ index.html                     임시 입구 — 미싱 뷰어를 불러온다. 실제 메인이 생기면 교체
-├─ handoff/                       ← 이 폴더
-│  ├─ README.md
+├─ README.md
+├─ readme/                        ← 이 폴더 (인수인계)
+│  ├─ 3DREADME.md
 │  └─ references/                 받은 자료와 피드백 캡처
 └─ assets/main/
    ├─ button/
@@ -128,7 +129,7 @@ kimhaeun/
 - **한계**: 다른 오브젝트가 사진급이 되면 이 미싱은 장난감처럼 보일 수 있다. 최종은 GLB 모델로 다시 만드는 게 좋다
 
 ### 바늘꽂이 — 작업 중 (막힘)
-- 참고: `references/pinCushion/` — 원래 각도별 이미지 10장이 `C:\김하은\사용중인폴더\바늘꽂이_3D_레퍼런스`에 있었는데 지금 그 폴더가 없다. 여기엔 대화 중에 받은 정면·반측면·옆면만 들어 있다
+- 참고: `references/pinCushion/` — 각도별 원본 10장(`00`~`09`: 바늘과 정면, 정면, 좌우 반측면·옆면, 후면, 위, 아래, 크림 진주핀 단독)
 - 빨간 체크 벨벳 몸통(별꽃 자수) + 양쪽 검정 부클레 귀(사선 스티치) + 빨간 유광 구슬핀 4개. 바닥의 진주핀은 뺀다
 - 지금 상태: 몸통 윤곽은 정면·옆면을 따로 재서 섞었고, 귀는 정면 기준으로 곧은 사선 스티치 3줄
 - **막힌 이유**: 천으로 부풀린 자유 곡면이라 코드로 숫자를 맞추는 방식이 잘 안 맞는다. 한 곳을 고치면 다른 곳이 틀어진다. 또 레퍼런스 이미지끼리 각도마다 귀 스티치 방향이 서로 안 맞는다(각도별로 따로 생성된 이미지)
@@ -210,7 +211,8 @@ git merge assets3d
 | button | buttonReference.png | 빨간 단추·갈색 단추 레퍼런스 |
 | | flowerButtonReference.png | 꽃 단추 레퍼런스 |
 | | feedback/ | 빨간 단추 경계선 수정 요청 |
-| pinCushion | pinCushionFront / ThreeQuarter / Side | 바늘꽂이 레퍼런스 (정면·반측면·옆면) |
+| pinCushion | 00~09 (한글 파일명) | 바늘꽂이 각도별 원본 10장 |
+| | pinCushionFront / ThreeQuarter / Side | 대화 중 받은 정면·반측면·옆면 (원본과 같은 장면) |
 | | feedback/ | 얼굴 곡선·볼륨 수정 요청 |
 | threadSpool | threadSpoolReference.webp | 실패 레퍼런스 |
 | | feedback/ | 뜨개실처럼 감기게, 띠 끝 감추기 요청 |
