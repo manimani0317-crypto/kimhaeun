@@ -1,0 +1,567 @@
+<title>Desk Object Tape</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ink:#171413; --red:#7A0706; --red-hi:#C4140E; --paper:#EEEAE2; --brass:#B99242;
+  --bg:#191513;
+
+  /* ══════════════════════════════════════════════════════════
+     ASSET SLOT — 여기 한 줄만 교체하면 끝.
+     렌더 PNG(배경 투명)를 넣으세요. 지금은 임시 캔버스 이미지.
+     ══════════════════════════════════════════════════════════ */
+  --reel: none;        /* 예: url("./asset/tape-reel.png") */
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:0 16px; background:#100D0C; color:var(--paper);
+  font-family:'IBM Plex Mono',ui-monospace,monospace; overflow-x:hidden;
+}
+.w{max-width:1180px;margin:0 auto}
+
+.head{padding:54px 0 26px}
+.head .e{font-size:10px;letter-spacing:.24em;color:var(--red-hi)}
+.head h1{font-family:'Bodoni Moda',Georgia,serif;font-weight:400;font-size:clamp(28px,5vw,46px);margin:14px 0 0}
+.head p{font-size:12px;color:#8E8478;margin:12px 0 0;line-height:1.95;max-width:58ch}
+
+/* ══════════ 무대 ══════════ */
+.stage{
+  position:relative; width:100%; height:min(72svh,620px); min-height:430px;
+  overflow:hidden; border-radius:2px; cursor:none;
+  background:
+    radial-gradient(130% 100% at 44% 26%, #262019 0%, #1B1613 40%, #0E0B0A 100%);
+}
+.stage::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:var(--noise); opacity:.55; mix-blend-mode:overlay;
+}
+.props{position:absolute;inset:0;pointer-events:none}
+.props i{position:absolute;display:block;filter:blur(.4px)}
+.props .sw1{
+  width:124px;height:96px;right:6%;top:9%;transform:rotate(6deg);
+  background:repeating-linear-gradient(42deg,#231D1A 0 5px,#2B2422 5px 10px);
+  box-shadow:0 22px 34px -20px #000,inset 0 1px 0 rgba(255,255,255,.04);
+}
+.props .sw2{
+  width:104px;height:82px;right:13.5%;top:17%;transform:rotate(-6deg);
+  background:repeating-linear-gradient(-28deg,#3A1210 0 4px,#471614 4px 8px);
+  box-shadow:0 18px 28px -18px #000,inset 0 1px 0 rgba(255,255,255,.05);
+}
+.props .th{
+  width:210px;height:210px;left:1%;bottom:-8%;border-radius:50%;
+  background:radial-gradient(circle at 38% 34%,#2E1715,#170C0B 68%,transparent 71%);
+  filter:blur(2px);
+}
+
+/* ══════════ 오브젝트 ══════════ */
+.obj{
+  position:absolute; left:50%; top:50%;
+  transform:translate(-50%,-50%) translateY(0) scale(1);
+  transition:transform .55s cubic-bezier(.18,.78,.26,1);
+  will-change:transform;
+}
+.stage.lift .obj{transform:translate(-50%,-50%) translateY(-34px) scale(1.045)}
+
+/* 바닥 그림자 — 오브젝트와 분리되어 책상에 남는다 */
+.shadow{
+  position:absolute; left:50%; top:50%; width:340px; height:130px;
+  margin:12px 0 0 -150px;
+  background:radial-gradient(ellipse 42% 48% at 47% 52%,rgba(0,0,0,.9),transparent 72%);
+  filter:blur(12px);
+  transform:translate(-50%,-50%) scale(1);
+  transition:transform .55s cubic-bezier(.18,.78,.26,1),filter .55s,opacity .55s;
+}
+.stage.lift .shadow{transform:translate(-50%,-50%) scale(1.3,1.18);filter:blur(24px);opacity:.6}
+
+/* ── 릴: 렌더 PNG 한 장 ── */
+.reel{
+  position:relative; display:block; z-index:2;
+  width:var(--rw,300px); height:auto;
+  filter:drop-shadow(0 16px 18px rgba(0,0,0,.55));
+  transition:filter .55s;
+}
+.stage.lift .reel{filter:drop-shadow(0 34px 30px rgba(0,0,0,.5)) brightness(1.06)}
+
+/* 하이라이트가 PNG 실루엣 안에서만 흐르도록 같은 이미지를 마스크로 사용 */
+.gloss{
+  position:absolute; left:0; top:0; z-index:3; pointer-events:none;
+  width:var(--rw,300px); height:100%;
+  -webkit-mask-image:var(--reel-mask); mask-image:var(--reel-mask);
+  -webkit-mask-size:100% 100%; mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  opacity:0;
+}
+.gloss i{
+  position:absolute; top:-25%; left:-55%; width:48%; height:150%;
+  background:linear-gradient(100deg,transparent,rgba(255,252,240,.62),transparent);
+  transform:skewX(-16deg);
+}
+.stage.lift .gloss{opacity:1}
+.stage.lift .gloss i{animation:sweep .95s cubic-bezier(.32,.66,.3,1) .04s}
+@keyframes sweep{ from{left:-55%} to{left:118%} }
+
+/* ── 테이프: 한 장의 긴 스트립을 조각들이 창처럼 들여다본다 ── */
+.tape{position:absolute;left:50%;top:50%;z-index:1}
+.seg{position:absolute;left:0;top:0;transform-origin:0 50%}
+.seg u{
+  display:block; position:absolute; left:0; top:0; width:100%; height:100%;
+  transform-origin:0 50%; transform:scaleX(0);
+  transition:transform .46s cubic-bezier(.3,.9,.28,1);
+  transition-delay:calc(var(--i) * 10ms);
+  background-image:var(--tape-tex); background-repeat:no-repeat;
+}
+.seg.rest u{transform:scaleX(1);transition-delay:0ms}
+.stage.lift .seg u{transform:scaleX(1)}
+.stage.lift .seg.rest u{transition-delay:0ms}
+
+.hook{
+  position:absolute; left:0; top:0; transform-origin:0 50%;
+  background:linear-gradient(177deg,#F2F5F7 0%,#C6CCD1 30%,#8F969B 58%,#565C61 100%);
+  border-radius:2px 3px 3px 2px;
+  box-shadow:0 3px 7px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.7);
+  opacity:0; transition:opacity .25s;
+}
+.hook::after{
+  content:""; position:absolute; left:34%; top:50%; width:5px; height:5px;
+  margin-top:-2.5px; border-radius:50%;
+  background:radial-gradient(circle at 36% 30%,#6F757A,#2A2F32);
+}
+.hook.show{opacity:1}
+.stage.lift .hook.show{opacity:0}
+.stage.lift .hook.full{opacity:1;transition-delay:.3s}
+
+/* 반짝임 */
+.spark{
+  position:absolute; width:18px; height:18px; z-index:4;
+  margin:-9px 0 0 -9px; opacity:0; pointer-events:none;
+  background:radial-gradient(circle,#FFFBEE 0%,#FFF3D0 40%,transparent 70%);
+  clip-path:polygon(50% 0,56% 44%,100% 50%,56% 56%,50% 100%,44% 56%,0 50%,44% 44%);
+}
+.stage.lift .spark{animation:pop .72s cubic-bezier(.2,.7,.3,1) both}
+.spark:nth-of-type(2){animation-delay:.11s}
+.spark:nth-of-type(3){animation-delay:.23s}
+@keyframes pop{
+  0%{opacity:0;transform:scale(.15) rotate(0)}
+  42%{opacity:1;transform:scale(1.2) rotate(35deg)}
+  100%{opacity:0;transform:scale(.45) rotate(72deg)}
+}
+
+/* ══════════ 주석 레이어 ══════════ */
+.anno{position:absolute;inset:0;pointer-events:none}
+.bracket{
+  position:absolute; border:1px solid var(--red-hi);
+  opacity:0; transform:scale(.975);
+  transition:opacity .3s,transform .45s cubic-bezier(.2,.8,.25,1);
+}
+.bracket::before,.bracket::after{
+  content:""; position:absolute; width:12px; height:12px; border:2px solid var(--red-hi);
+}
+.bracket::before{left:-5px;top:-5px;border-width:2px 0 0 2px}
+.bracket::after{right:-5px;bottom:-5px;border-width:0 2px 2px 0}
+.stage.lift .bracket{opacity:.85;transform:scale(1)}
+
+.callout{position:absolute;opacity:0;transform:translateY(7px);
+  transition:opacity .35s .14s,transform .4s .14s}
+.stage.lift .callout{opacity:1;transform:translateY(0)}
+.callout .m{font-family:'Bodoni Moda',Georgia,serif;font-size:34px;line-height:1;
+  color:var(--paper);margin-bottom:7px;letter-spacing:-.015em}
+.callout .m span{font-size:14px;color:var(--red-hi);margin-left:5px;
+  font-family:'IBM Plex Mono',monospace}
+.callout .rule{height:1px;background:var(--red-hi);width:0;
+  transition:width .5s .22s cubic-bezier(.2,.8,.25,1)}
+.stage.lift .callout .rule{width:100%}
+.callout .k{font-size:10px;letter-spacing:.2em;color:#8E8478;margin-top:8px}
+.callout .k em{color:var(--paper);font-style:normal}
+
+.idx{position:absolute;left:5%;bottom:8%;font-size:10px;letter-spacing:.22em;
+  color:#6E655B;transition:color .3s}
+.stage.lift .idx{color:var(--red-hi)}
+
+.dot{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;
+  background:var(--red-hi);pointer-events:none;box-shadow:0 0 14px rgba(196,20,14,.85);
+  opacity:0;z-index:9;
+  transition:opacity .25s,width .22s,height .22s,margin .22s,background .22s}
+.stage.cursor-in .dot{opacity:1}
+.stage.lift .dot{width:34px;height:34px;margin:-17px 0 0 -17px;
+  background:rgba(196,20,14,.16);box-shadow:0 0 0 1px var(--red-hi) inset}
+
+.hit{position:absolute;padding:0;border:0;background:none;cursor:none;
+  border-radius:50%;z-index:8;-webkit-tap-highlight-color:transparent}
+.hit:focus-visible{outline:1px solid var(--paper);outline-offset:10px}
+
+.flag{
+  position:absolute; right:14px; top:14px; z-index:9;
+  font-size:9px; letter-spacing:.14em; color:#C4140E;
+  border:1px solid rgba(196,20,14,.45); padding:5px 9px; border-radius:2px;
+  background:rgba(16,13,12,.7);
+}
+
+/* ══════════ 에셋 안내 ══════════ */
+.asset{margin:34px auto 70px;border-top:1px solid #2A2421;padding-top:30px}
+.asset h2{font-size:11px;letter-spacing:.2em;color:var(--red-hi);margin:0 0 6px;font-weight:600}
+.asset .sub{font-size:12px;color:#8E8478;line-height:1.95;margin:0 0 22px;max-width:62ch}
+.grid{display:flex;gap:26px;flex-wrap:wrap}
+.grid > div{flex:1 1 280px}
+.grid h3{font-size:10px;letter-spacing:.18em;color:var(--paper);margin:0 0 9px;font-weight:600}
+.grid p{margin:0;font-size:11.5px;line-height:2;color:#8E8478}
+.grid code{color:#D8CFC2;background:#1C1816;padding:1px 5px;border-radius:2px;font-size:11px}
+pre{
+  background:#171413;border:1px solid #2A2421;border-radius:3px;
+  padding:16px;margin:16px 0 0;overflow-x:auto;
+  font-size:11px;line-height:1.85;color:#C9C0B4;white-space:pre-wrap;
+}
+pre b{color:#E8B73A;font-weight:400}
+
+@media (prefers-reduced-motion:reduce){
+  .stage *,.obj,.shadow{transition-duration:.01ms!important;animation:none!important}
+}
+@media (max-width:640px){ .stage{cursor:auto} .dot{display:none} }
+</style>
+
+<div class="w head">
+  <div class="e">MAIN SCREEN · OBJECT 02</div>
+  <h1>자동줄자 — N서울타워</h1>
+  <p>릴은 렌더 PNG 한 장, 테이프는 코드가 그려서 무한히 늘립니다. 호버하면 책상에서 들려 올라가며 실루엣을 따라 하이라이트가 흐르고, 테이프가 풀려 236.7m를 잽니다.</p>
+</div>
+
+<div class="w">
+  <div class="stage" id="stage">
+    <div class="props"><i class="sw1"></i><i class="sw2"></i><i class="th"></i></div>
+
+    <div class="shadow"></div>
+    <div class="obj" id="obj">
+      <div class="tape" id="tape"></div>
+      <img class="reel" id="reelimg" alt="자동줄자">
+      <div class="gloss" id="gloss"><i></i></div>
+      <i class="spark" style="left:62%;top:14%"></i>
+      <i class="spark" style="left:18%;top:66%"></i>
+      <i class="spark" style="left:44%;top:88%"></i>
+    </div>
+
+    <div class="anno">
+      <div class="bracket" id="bracket"></div>
+      <div class="callout" id="callout">
+        <div class="m">236.7<span>m</span></div>
+        <div class="rule"></div>
+        <div class="k">02 — <em id="proj">N SEOUL TOWER</em> / UXUI RENEWAL</div>
+      </div>
+    </div>
+
+    <div class="idx">OBJECT 02 / 07 &nbsp;·&nbsp; 자동줄자</div>
+    <button class="hit" id="hit" type="button" aria-label="N서울타워 프로젝트 열기"></button>
+    <i class="dot" id="dot"></i>
+    <div class="flag" id="flag">PLACEHOLDER RENDER</div>
+  </div>
+</div>
+
+<div class="w asset">
+  <h2>교체 방법</h2>
+  <p class="sub">지금 보이는 릴은 코드로 그린 임시 이미지입니다. 아래 프롬프트로 PNG를 뽑아 배경을 지운 뒤, CSS 최상단 <code>--reel</code> 한 줄만 바꾸면 그대로 붙습니다. 나머지 코드는 손댈 필요 없습니다.</p>
+
+  <div class="grid">
+    <div>
+      <h3>1 — 생성 프롬프트</h3>
+      <p>기존 실타래·단추와 <strong>같은 조명 조건</strong>을 명시하는 게 핵심입니다. 가능하면 실타래 이미지를 레퍼런스로 함께 넣으세요.</p>
+    </div>
+    <div>
+      <h3>2 — 후처리</h3>
+      <p>배경 검정을 알파로 제거 → 물체 주변 검은 테두리(프린지) 정리 → <code>2x</code> 해상도로 저장. 그림자는 코드가 그리므로 <strong>PNG에 그림자를 포함하지 마세요.</strong></p>
+    </div>
+    <div>
+      <h3>3 — 연결</h3>
+      <p>CSS <code>--reel: url("...")</code> 지정. 자바스크립트가 이미지를 읽어 테이프 출구 위치와 히트영역을 자동으로 다시 계산합니다.</p>
+    </div>
+  </div>
+
+<pre>A vintage automatic tape measure case, <b>viewed from 35° above at a three-quarter
+angle, lying on its side</b>. Round housing in deep crimson satin plastic (#7A0706)
+with fine vertical ribbing around the rim. Cream-white circular dial face
+(#EEEAE2) with fine black tick marks and small numbers 1–20 around the edge,
+brass center hub with two small holes. Brushed steel belt clip on the left side.
+A short stub of yellow measuring tape emerging from the bottom edge.
+
+<b>Studio product render on a pure black background.</b> One large soft area light
+from the upper left at 45°, deep falloff into near-black on the right, no rim
+light. Matte satin finish, broad gentle specular, no hard reflections.
+<b>No ground shadow, no background props, object isolated and centered.</b>
+Photorealistic 3D render, sharp focus, high detail, square 1:1.</pre>
+</div>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage'), obj=document.getElementById('obj'),
+      tape=document.getElementById('tape'), reelimg=document.getElementById('reelimg'),
+      gloss=document.getElementById('gloss'), hit=document.getElementById('hit'),
+      dot=document.getElementById('dot'), brk=document.getElementById('bracket'),
+      call=document.getElementById('callout'), flag=document.getElementById('flag');
+
+  var RW = 300;                                  // 릴 표시 폭(px)
+  var TW = 27;                                   // 테이프 시작 폭
+  var TAPER = 0.66;                              // 끝쪽 폭 비율 (원근)
+
+  /* ───────────── 노이즈(펠트) ───────────── */
+  (function(){
+    var n=46,c=document.createElement('canvas'),x=c.getContext('2d');
+    c.width=c.height=n; var d=x.createImageData(n,n);
+    for(var i=0;i<d.data.length;i+=4){
+      var v=190+Math.random()*65;
+      d.data[i]=d.data[i+1]=d.data[i+2]=v; d.data[i+3]=18;
+    }
+    x.putImageData(d,0,0);
+    document.documentElement.style.setProperty('--noise','url('+c.toDataURL()+')');
+  })();
+
+  /* ───────────── 테이프 스트립: 긴 이미지 1장을 고해상도로 그림 ─────────────
+     평면 인쇄물이라 렌더 대신 캔버스로 그려도 동일한 결과가 나옵니다.
+     직물 짜임 + 잉크 번짐 + 말림 하이라이트까지 포함.                        */
+  var STRIP = 900, DPR = Math.min(2, devicePixelRatio||1);
+  function tapeStrip(){
+    var W=STRIP, H=40, c=document.createElement('canvas'), x=c.getContext('2d');
+    c.width=W*DPR; c.height=H*DPR; x.scale(DPR,DPR);
+
+    // 1) 폭 방향 곡률 음영 — 테이프가 살짝 말려 빛을 받는 느낌
+    var g=x.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#A97A18'); g.addColorStop(.06,'#D9A92F');
+    g.addColorStop(.26,'#F5CF5C'); g.addColorStop(.44,'#EBBE44');
+    g.addColorStop(.72,'#D5A32B'); g.addColorStop(.94,'#B4831C');
+    g.addColorStop(1,'#8C6413');
+    x.fillStyle=g; x.fillRect(0,0,W,H);
+
+    // 2) 직물 짜임 — 세로/가로 실 교차
+    x.globalAlpha=.055;
+    for(var i=0;i<W;i+=2){ x.fillStyle=i%4?'#000':'#FFF'; x.fillRect(i,0,1,H); }
+    for(var j=0;j<H;j+=2){ x.fillStyle=j%4?'#000':'#FFF'; x.fillRect(0,j,W,1); }
+    x.globalAlpha=1;
+
+    // 3) 길이 방향 미세 얼룩 (인쇄 불균일)
+    for(var k=0;k<160;k++){
+      x.globalAlpha=.02+Math.random()*.03;
+      x.fillStyle=Math.random()>.5?'#FFF3C4':'#6B4D10';
+      x.fillRect(Math.random()*W,Math.random()*H,4+Math.random()*26,1+Math.random()*2);
+    }
+    x.globalAlpha=1;
+
+    // 4) 눈금 — 밑변에서 올라오는 검정 인쇄
+    var STEP=11.6;                                // 1칸 ≒ 1cm
+    for(var t=0;t*STEP<W;t++){
+      var px=t*STEP, maj=t%10===0, mid=t%5===0;
+      var len = maj?20:(mid?13:8);
+      x.globalAlpha=.06; x.fillStyle='#000';      // 잉크 번짐
+      x.fillRect(px-.7,H-len-1,maj?3.1:2.3,len+1);
+      x.globalAlpha=maj?.88:(mid?.72:.5); x.fillStyle='#14100E';
+      x.fillRect(px,H-len,maj?1.7:1.1,len);
+    }
+    x.globalAlpha=1;
+
+    // 5) 붉은 숫자 — 길이 방향에 직각
+    x.textAlign='center'; x.textBaseline='middle';
+    x.font='600 12px "IBM Plex Mono",monospace';
+    for(var m=1;m*STEP*10<W;m++){
+      x.save(); x.translate(m*STEP*10+7, 13); x.rotate(-Math.PI/2);
+      x.globalAlpha=.16; x.fillStyle='#000'; x.fillText(m*10,0,.8);
+      x.globalAlpha=.92; x.fillStyle='#7A0706'; x.fillText(m*10,0,0);
+      x.restore();
+    }
+    x.globalAlpha=1;
+
+    // 6) 가장자리 — 위쪽 하이라이트 실선 / 아래쪽 그림자
+    x.fillStyle='rgba(255,246,214,.55)'; x.fillRect(0,.5,W,.9);
+    x.fillStyle='rgba(0,0,0,.42)'; x.fillRect(0,H-1.2,W,1.2);
+
+    return c.toDataURL('image/png');
+  }
+  document.documentElement.style.setProperty('--tape-tex','url('+tapeStrip()+')');
+
+  /* ───────────── 임시 릴 이미지 (렌더 PNG로 교체될 자리) ───────────── */
+  function placeholderReel(){
+    var S=560, c=document.createElement('canvas'), x=c.getContext('2d');
+    c.width=c.height=S*DPR; x.scale(DPR,DPR);
+    var cx=S*0.5, cy=S*0.46, rx=S*0.34, ry=S*0.205, dep=S*0.135;
+
+    function ell(ax,ay,arx,ary){ x.beginPath(); x.ellipse(ax,ay,arx,ary,0,0,7); }
+
+    // 옆면(리브) — 아래쪽 몸통
+    for(var i=0;i<=44;i++){
+      var a0=Math.PI*(i/44), a1=Math.PI*((i+1)/44);
+      var lum=Math.max(0,Math.cos(a0-2.5));
+      x.beginPath();
+      x.moveTo(cx-Math.cos(a0)*rx, cy+Math.sin(a0)*ry);
+      x.lineTo(cx-Math.cos(a1)*rx, cy+Math.sin(a1)*ry);
+      x.lineTo(cx-Math.cos(a1)*rx, cy+Math.sin(a1)*ry+dep);
+      x.lineTo(cx-Math.cos(a0)*rx, cy+Math.sin(a0)*ry+dep);
+      x.closePath();
+      var L=13+30*Math.pow(lum,1.4)+(i%2?2.6:-2.6);
+      x.fillStyle='hsl(2 '+(82-lum*14)+'% '+L+'%)'; x.fill();
+    }
+    // 몸통 하단 어두운 마감
+    var bg=x.createLinearGradient(0,cy,0,cy+dep);
+    bg.addColorStop(0,'rgba(0,0,0,0)'); bg.addColorStop(1,'rgba(0,0,0,.55)');
+    x.fillStyle=bg; x.fillRect(cx-rx,cy,rx*2,dep);
+
+    // 윗면(케이스)
+    var tg=x.createRadialGradient(cx-rx*.36,cy-ry*.5,rx*.08,cx,cy,rx*1.12);
+    tg.addColorStop(0,'#C4140E'); tg.addColorStop(.42,'#8E0A07');
+    tg.addColorStop(.8,'#520504'); tg.addColorStop(1,'#380302');
+    ell(cx,cy,rx,ry); x.fillStyle=tg; x.fill();
+
+    // 다이얼
+    var drx=rx*.66, dry=ry*.66;
+    var dg=x.createRadialGradient(cx-drx*.4,cy-dry*.5,2,cx,cy,drx);
+    dg.addColorStop(0,'#FEFBF3'); dg.addColorStop(.58,'#EAE5DB'); dg.addColorStop(1,'#C7BDA8');
+    ell(cx,cy,drx,dry); x.fillStyle=dg; x.fill();
+    x.lineWidth=1.4; x.strokeStyle='rgba(0,0,0,.35)'; x.stroke();
+
+    for(var t2=0;t2<80;t2++){                     // 눈금
+      var a=t2*Math.PI/40, big=t2%4===0;
+      x.globalAlpha=big?.8:.38; x.strokeStyle='#171413'; x.lineWidth=big?1.5:.9;
+      x.beginPath();
+      x.moveTo(cx+Math.cos(a)*drx*.96, cy+Math.sin(a)*dry*.96);
+      x.lineTo(cx+Math.cos(a)*drx*(big?.82:.88), cy+Math.sin(a)*dry*(big?.82:.88));
+      x.stroke();
+    }
+    x.globalAlpha=1; x.textAlign='center'; x.textBaseline='middle';
+    x.font='600 15px "IBM Plex Mono",monospace';
+    for(var n=1;n<=20;n++){                       // 숫자
+      var ang=(n/20)*Math.PI*2-Math.PI/2;
+      x.save();
+      x.translate(cx+Math.cos(ang)*drx*.7, cy+Math.sin(ang)*dry*.7);
+      x.rotate(ang+Math.PI/2); x.scale(1,.72);
+      x.fillStyle=n>12?'#7A0706':'#171413'; x.fillText(n,0,0); x.restore();
+    }
+    var hg=x.createRadialGradient(cx-3,cy-3,1,cx,cy,drx*.17);
+    hg.addColorStop(0,'#E4CE94'); hg.addColorStop(.55,'#B99242'); hg.addColorStop(1,'#7C5C22');
+    ell(cx,cy,drx*.17,dry*.17); x.fillStyle=hg; x.fill();
+    x.fillStyle='#241E1B';
+    ell(cx-drx*.07,cy,drx*.042,dry*.042); x.fill();
+    ell(cx+drx*.07,cy,drx*.042,dry*.042); x.fill();
+
+    // 윗면 스펙큘러
+    x.save(); ell(cx,cy,rx,ry); x.clip();
+    var sg=x.createLinearGradient(cx-rx,cy-ry,cx+rx*.3,cy+ry);
+    sg.addColorStop(0,'rgba(255,255,255,.34)'); sg.addColorStop(.35,'rgba(255,255,255,.05)');
+    sg.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle=sg; x.fillRect(cx-rx,cy-ry,rx*2,ry*2); x.restore();
+
+    // 벨트 클립
+    x.save(); x.translate(cx-rx*.98, cy+ry*.18); x.rotate(-.14);
+    var cg=x.createLinearGradient(0,-11,0,13);
+    cg.addColorStop(0,'#E4E9EC'); cg.addColorStop(.45,'#9BA1A6'); cg.addColorStop(1,'#565C61');
+    x.fillStyle=cg; x.beginPath();
+    x.roundRect ? x.roundRect(-30,-11,38,25,4) : x.rect(-30,-11,38,25);
+    x.fill();
+    x.fillStyle='#31363A'; x.beginPath(); x.ellipse(-20,1,5,5,0,0,7); x.fill();
+    x.restore();
+
+    return c.toDataURL('image/png');
+  }
+
+  /* ───────────── 에셋 연결 ───────────── */
+  var cssReel = getComputedStyle(document.documentElement).getPropertyValue('--reel').trim();
+  var hasReal = cssReel && cssReel !== 'none';
+  var src = hasReal ? cssReel.replace(/^url\(["']?/,'').replace(/["']?\)$/,'') : placeholderReel();
+  flag.hidden = hasReal;
+  reelimg.src = src;
+  document.documentElement.style.setProperty('--reel-mask','url('+src+')');
+  reelimg.style.setProperty('--rw', RW+'px');
+  gloss.style.setProperty('--rw', RW+'px');
+
+  /* ───────────── 테이프 경로 ───────────── */
+  var segs=[], hooks=[], REST=8, N=30;
+  function buildTape(){
+    tape.innerHTML=''; segs=[]; hooks=[];
+    // 릴 아래쪽 가장자리에서 테이프가 나온다 (릴 크기 기준 상대 좌표)
+    var ox = -RW*0.03, oy = RW*0.17;
+    var P=[[ox,oy],[ox-RW*0.30,oy+RW*0.20],[ox-RW*0.66,oy-RW*0.10],[ox-RW*1.06,oy+RW*0.10]];
+    var pts=[];
+    for(var t=0;t<=N;t++){
+      var u=t/N, v=1-u;
+      pts.push([
+        v*v*v*P[0][0]+3*v*v*u*P[1][0]+3*v*u*u*P[2][0]+u*u*u*P[3][0],
+        v*v*v*P[0][1]+3*v*v*u*P[1][1]+3*v*u*u*P[2][1]+u*u*u*P[3][1]
+      ]);
+    }
+    var run=0, frag=document.createDocumentFragment();
+    for(var s=0;s<N;s++){
+      var p0=pts[s],p1=pts[s+1],
+          dx=p1[0]-p0[0], dy=p1[1]-p0[1],
+          len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx),
+          w = TW*(1-(1-TAPER)*(s/N)),                    // 원근 테이퍼
+          d=document.createElement('div');
+      d.className='seg'+(s<REST?' rest':'');
+      d.style.cssText='width:'+(len+1.1).toFixed(2)+'px;height:'+w.toFixed(2)+
+                      'px;margin-top:'+(-w/2).toFixed(2)+'px';
+      d.style.transform='translate('+p0[0].toFixed(1)+'px,'+p0[1].toFixed(1)+
+                        'px) rotate('+ang.toFixed(4)+'rad)';
+      var u2=document.createElement('u');
+      u2.style.setProperty('--i',s);
+      u2.style.backgroundSize = STRIP+'px 100%';
+      u2.style.backgroundPosition = (-run).toFixed(1)+'px 0';
+      d.appendChild(u2); frag.appendChild(d); segs.push(d);
+      run += len;
+    }
+    [[REST,'show'],[N,'full']].forEach(function(o){
+      var p0=pts[o[0]], p1=pts[Math.min(o[0]+1,N)],
+          ang=Math.atan2(p1[1]-p0[1],p1[0]-p0[0]),
+          w=TW*(1-(1-TAPER)*(o[0]/N))+4,
+          h=document.createElement('i');
+      h.className='hook '+o[1];
+      h.style.cssText='width:16px;height:'+w.toFixed(1)+'px;margin-top:'+(-w/2).toFixed(1)+'px';
+      h.style.transform='translate('+p0[0].toFixed(1)+'px,'+p0[1].toFixed(1)+
+                        'px) rotate('+ang.toFixed(4)+'rad)';
+      frag.appendChild(h);
+    });
+    tape.appendChild(frag);
+  }
+
+  /* ───────────── 레이아웃 ───────────── */
+  function layout(){
+    var w=stage.clientWidth, h=stage.clientHeight;
+    RW = Math.max(190, Math.min(320, Math.min(w*0.30, h*0.52)));
+    TW = RW*0.09;
+    reelimg.style.setProperty('--rw',RW+'px');
+    gloss.style.setProperty('--rw',RW+'px');
+    buildTape();
+
+    var r=obj.getBoundingClientRect(), s=stage.getBoundingClientRect(),
+        ri=reelimg.getBoundingClientRect(),
+        cx=ri.left-s.left+ri.width/2, cy=ri.top-s.top+ri.height/2;
+    hit.style.cssText='position:absolute;left:'+(cx-RW*0.42)+'px;top:'+(cy-RW*0.28)+
+                      'px;width:'+(RW*0.84)+'px;height:'+(RW*0.56)+'px;z-index:8';
+    var bw=RW*1.28, bh=RW*0.72;
+    brk.style.cssText='position:absolute;left:'+(cx-bw*0.92)+'px;top:'+(cy-bh*0.44)+
+                      'px;width:'+bw+'px;height:'+bh+'px';
+    call.style.cssText='position:absolute;left:'+Math.max(18,cx-bw*0.92)+'px;top:'+
+                       Math.max(14,cy-bh*0.44-96)+'px;width:'+Math.max(210,bw*0.72)+'px';
+  }
+  if(reelimg.complete) layout(); else reelimg.onload=layout;
+  addEventListener('resize',layout,{passive:true});
+
+  /* ───────────── 커서 & 인터랙션 ───────────── */
+  var tx=0,ty=0,px=0,py=0,raf=0;
+  function loop(){
+    px+=(tx-px)*.24; py+=(ty-py)*.24;
+    dot.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px)';
+    raf = (Math.abs(tx-px)>.4||Math.abs(ty-py)>.4) ? requestAnimationFrame(loop) : 0;
+  }
+  stage.addEventListener('pointermove',function(e){
+    var r=stage.getBoundingClientRect();
+    tx=e.clientX-r.left; ty=e.clientY-r.top;
+    if(!raf) raf=requestAnimationFrame(loop);
+  },{passive:true});
+  stage.addEventListener('pointerenter',function(){stage.classList.add('cursor-in')});
+  stage.addEventListener('pointerleave',function(){stage.classList.remove('cursor-in')});
+
+  function on(){stage.classList.add('lift')}
+  function off(){stage.classList.remove('lift')}
+  hit.addEventListener('pointerenter',on);
+  hit.addEventListener('pointerleave',off);
+  hit.addEventListener('focus',on);
+  hit.addEventListener('blur',off);
+  hit.addEventListener('click',function(){
+    var p=document.getElementById('proj');
+    p.textContent='OPENING…';
+    setTimeout(function(){p.textContent='N SEOUL TOWER'},1100);
+  });
+})();
+</script>

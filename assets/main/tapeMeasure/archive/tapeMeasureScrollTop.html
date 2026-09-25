@@ -1,0 +1,340 @@
+<title>Tape Measure Scroll</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+/* ═══════════ 데모 페이지 (실제 적용 시엔 필요 없음) ═══════════ */
+:root{
+  --ink:#171413; --red:#7A0706; --red-hi:#B4110C; --paper:#EEEAE2;
+  --bg:#171413; --fg:#EEEAE2; --fg-dim:#8d8378; --rule:#2e2724;
+}
+:root[data-theme="light"]{ --bg:#EEEAE2; --fg:#171413; --fg-dim:#6b6156; --rule:#d6d0c4; }
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){ --bg:#EEEAE2; --fg:#171413; --fg-dim:#6b6156; --rule:#d6d0c4; }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:0 16px; background:var(--bg); color:var(--fg);
+  font-family:'IBM Plex Mono',ui-monospace,monospace; overflow-x:hidden;
+}
+.wrap{max-width:720px;margin:0 auto}
+.hero{padding:120px 0 70px}
+.eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--red-hi);font-weight:600}
+.hero h1{
+  font-family:'Bodoni Moda',Georgia,serif; font-weight:400;
+  font-size:clamp(42px,9vw,86px); line-height:.95; margin:18px 0 22px; letter-spacing:-.01em;
+}
+.hero p{color:var(--fg-dim);font-size:13.5px;line-height:2;max-width:52ch;margin:0}
+.sec{padding:76px 0;border-top:1px solid var(--rule)}
+.sec .n{font-size:11px;letter-spacing:.18em;color:var(--red-hi);font-weight:600;margin-bottom:14px}
+.sec h2{font-family:'Bodoni Moda',Georgia,serif;font-weight:400;font-size:clamp(24px,4.5vw,38px);margin:0 0 16px}
+.sec p{color:var(--fg-dim);font-size:13.5px;line-height:2;max-width:54ch;margin:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:26px}
+.chip{font-size:10px;letter-spacing:.1em;padding:7px 11px;border:1px solid var(--rule);color:var(--fg-dim)}
+footer{padding:60px 0 140px;border-top:1px solid var(--rule);color:var(--fg-dim);font-size:11px;letter-spacing:.12em}
+
+
+/* ════════════════════════════════════════════════════════════
+   TAPE MEASURE SCROLL-TOP  ·  여기서부터가 위젯 (복붙 구간)
+   ════════════════════════════════════════════════════════════ */
+#tape{
+  --r:38px;          /* 릴 반지름 */
+  --d:25px;          /* 릴 두께 */
+  --w:25px;          /* 테이프 폭 */
+  --len:0px;         /* 스크롤이 채우는 값 */
+  --tilt:-17deg;
+  position:fixed; right:30px; bottom:34px; z-index:900;
+  width:calc(var(--r)*2); height:calc(var(--r)*2);
+  perspective:760px; perspective-origin:50% 62%;
+  pointer-events:none;
+}
+#tape *{position:absolute;top:0;left:0}
+#tape .rig{
+  width:100%; height:100%; transform-style:preserve-3d;
+  transform:rotateX(7deg) rotateY(var(--tilt));
+  transition:transform .45s cubic-bezier(.2,.8,.3,1);
+  animation:tape-float 7s ease-in-out infinite;
+}
+@keyframes tape-float{
+  0%,100%{transform:rotateX(7deg)   rotateY(var(--tilt))}
+  50%    {transform:rotateX(4.5deg) rotateY(calc(var(--tilt) + 3deg))}
+}
+
+/* ── 테이프 리본: 릴 중심에서 위로 뻗는 3D 평면 ── */
+#tape .ribbon{
+  left:50%; top:50%; width:var(--w); height:var(--len);
+  margin-left:calc(var(--w)/-2);
+  transform-origin:50% 100%;
+  transform:translateY(-100%) translateZ(-1px) rotateX(-2.5deg);
+  background:
+    linear-gradient(90deg,rgba(0,0,0,.38) 0%,rgba(255,255,255,.34) 26%,
+                          rgba(255,255,255,.06) 56%,rgba(0,0,0,.26) 100%),
+    var(--tape-tex,#E4B437);
+  background-repeat:no-repeat,repeat-y;
+  background-size:100% 100%,100% var(--tile,70px);
+  border-radius:1px;
+  box-shadow:-5px 0 12px -6px rgba(0,0,0,.75);
+  will-change:height;
+}
+#tape .tip{                      /* 끝단 금속 후크 */
+  left:50%; top:calc(50% - var(--len) - 11px);
+  width:calc(var(--w) + 4px); height:13px; margin-left:calc((var(--w) + 4px)/-2);
+  transform:translateZ(0.5px);
+  background:linear-gradient(180deg,#e8ebed,#a9afb4 48%,#6e7479);
+  border-radius:2px 2px 3px 3px;
+  box-shadow:0 2px 5px rgba(0,0,0,.55);
+  opacity:0; transition:opacity .25s;
+}
+#tape .tip::after{
+  content:""; left:50%; top:4px; width:5px; height:5px; margin-left:-2.5px;
+  border-radius:50%; background:#4c5256; box-shadow:inset 0 1px 1px rgba(0,0,0,.6);
+}
+#tape.on .tip{opacity:1}
+
+/* ── 릴 본체 ── */
+#tape .reel{
+  width:100%; height:100%; transform-style:preserve-3d;
+  transition:transform .4s cubic-bezier(.2,.8,.3,1);
+}
+#tape .side{                      /* 원기둥 옆면 조각 (JS가 30장 생성) */
+  left:50%; top:50%; width:var(--seg); height:var(--d);
+  margin:calc(var(--d)/-2) 0 0 calc(var(--seg)/-2);
+  backface-visibility:hidden;
+}
+#tape .face{                      /* 앞/뒤 원판 */
+  left:50%; top:50%; width:calc(var(--r)*2 - 2px); height:calc(var(--r)*2 - 2px);
+  margin:calc(var(--r)*-1 + 1px) 0 0 calc(var(--r)*-1 + 1px);
+  border-radius:50%;
+}
+#tape .front{
+  transform:translateZ(calc(var(--d)/2));
+  background:radial-gradient(circle at 34% 26%,#B4110C 0%,#7A0706 46%,#4A0403 84%,#320201 100%);
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.22),inset 0 -6px 12px rgba(0,0,0,.45);
+  display:grid; place-items:center;
+}
+#tape .back{
+  transform:translateZ(calc(var(--d)/-2)) rotateY(180deg);
+  background:radial-gradient(circle at 60% 70%,#5B0504,#2A0201 85%);
+}
+#tape .dial{                      /* 캔버스 텍스처 1장 = 눈금판 */
+  position:relative; top:auto; left:auto; margin:0;
+  width:calc(var(--r)*1.42); height:calc(var(--r)*1.42); border-radius:50%;
+  background:var(--dial-tex) center/100% 100% no-repeat;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.3);
+  transform:rotate(var(--spin,0deg));
+  will-change:transform;
+}
+#tape .lever{                     /* 좌측 금속 클립 홀더 */
+  left:50%; top:50%; width:19px; height:14px;
+  margin:-7px 0 0 calc(var(--r)*-1 - 5px);
+  transform:translateZ(1px) rotateY(-16deg);
+  background:linear-gradient(170deg,#d2d7da,#92989d 42%,#5f6468);
+  border-radius:3px 2px 2px 4px;
+  box-shadow:-3px 3px 7px rgba(0,0,0,.6);
+}
+#tape .lever::after{
+  content:""; left:4px; top:4px; width:6px; height:6px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#7d8388,#33383b);
+}
+#tape .shade{                     /* 바닥 그림자 */
+  left:50%; top:50%; width:86px; height:16px; margin:calc(var(--r) - 4px) 0 0 -43px;
+  transform:rotateX(78deg) translateZ(-16px);
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.55),transparent 72%);
+  filter:blur(3px);
+}
+
+/* ── 히트 영역 / 상호작용 ── */
+#tape .hit{
+  inset:0; width:100%; height:100%; border-radius:50%;
+  pointer-events:auto; cursor:pointer;
+  background:none; border:0; padding:0; -webkit-tap-highlight-color:transparent;
+}
+#tape .hit:focus-visible{outline:2px solid var(--paper);outline-offset:6px;border-radius:50%}
+#tape .hit:hover ~ .rig .reel,
+#tape .hit:focus-visible ~ .rig .reel{transform:scale(1.07) rotateY(9deg)}
+#tape .hit:active ~ .rig .reel{transform:scale(.95)}
+#tape .hit:hover ~ .rig{animation-play-state:paused}
+
+#tape .read{                      /* 퍼센트 태그 */
+  left:50%; top:calc(100% + 11px); width:46px; margin-left:-23px;
+  font:600 9px/1 'IBM Plex Mono',ui-monospace,monospace; letter-spacing:.08em;
+  text-align:center; padding:4px 0; color:#7A0706; background:#EEEAE2;
+  border-radius:2px; box-shadow:0 3px 9px rgba(0,0,0,.5);
+  opacity:0; transform:translateY(-3px); transition:opacity .25s,transform .25s;
+}
+#tape.on .read{opacity:1;transform:translateY(0)}
+
+@media (max-width:560px){ #tape{--r:30px;--d:20px;--w:20px;right:16px;bottom:20px} }
+@media (prefers-reduced-motion:reduce){
+  #tape .rig{animation:none}
+  #tape *{transition-duration:.01ms!important}
+}
+</style>
+
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Kim Haeun · UX/UI Designer</div>
+    <h1>Portfolio</h1>
+    <p>오른쪽 아래 줄자를 보세요. 스크롤한 만큼 테이프가 실제로 풀려 나오고, 릴을 클릭하면 되감기며 맨 위로 돌아갑니다. 라이브러리 없이 CSS 3D로만 만든 위젯입니다.</p>
+  </header>
+
+  <section class="sec">
+    <div class="n">01 — ABOUT ME</div>
+    <h2>재기 전에는 자르지 않습니다</h2>
+    <p>옷감을 재단하기 전 치수를 두 번 확인하듯, 화면을 그리기 전에 사용자의 동선을 먼저 측정합니다. 측정 가능한 것만 개선할 수 있다고 믿습니다.</p>
+    <div class="chips"><span class="chip">FIGMA</span><span class="chip">PROTOTYPING</span><span class="chip">DESIGN SYSTEM</span></div>
+  </section>
+
+  <section class="sec">
+    <div class="n">02–05 — UXUI PROJECT</div>
+    <h2>Vesta Series · 사용 설명서라는 형식</h2>
+    <p>Rose / XL 2000 / SF 시리즈. 재봉틀 매뉴얼의 분해도와 부품 번호 체계를 인터페이스 언어로 옮긴 작업입니다. 실선과 점선, x1·x2 같은 수량 표기가 그대로 UI 라벨이 됩니다.</p>
+  </section>
+
+  <section class="sec">
+    <div class="n">06 — PACKAGE DESIGN</div>
+    <h2>검정 위의 붉은 실</h2>
+    <p>붉은 실타래, 단추, 립스틱. 채도 높은 레드 하나에만 힘을 주고 나머지는 눌러 쓰는 것이 이 시리즈의 유일한 규칙입니다.</p>
+    <div class="chips"><span class="chip">#171413</span><span class="chip">#7A0706</span><span class="chip">#EEEAE2</span></div>
+  </section>
+
+  <section class="sec">
+    <div class="n">07 — ETC</div>
+    <h2>테이프는 끝까지 풀립니다</h2>
+    <p>여기까지 내려오면 눈금이 끝에 닿고 릴 아래 숫자가 100을 가리킵니다. 클릭해서 되감아 보세요.</p>
+  </section>
+
+  <footer>© 2026 KIM HAEUN — ALL RIGHTS RESERVED</footer>
+</div>
+
+
+<!-- ══════ 위젯 마크업 (복붙 구간) ══════ -->
+<div id="tape">
+  <button class="hit" type="button" aria-label="맨 위로 이동"></button>
+  <div class="rig">
+    <div class="ribbon"></div>
+    <div class="tip"></div>
+    <div class="shade"></div>
+    <div class="reel">
+      <div class="face back"></div>
+      <div class="face front"><div class="dial"></div></div>
+      <div class="lever"></div>
+    </div>
+  </div>
+  <div class="read">0<span style="opacity:.5">%</span></div>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('tape');
+  if(!root) return;
+  var reel  = root.querySelector('.reel'),
+      dial  = root.querySelector('.dial'),
+      read  = root.querySelector('.read'),
+      hit   = root.querySelector('.hit'),
+      cs    = getComputedStyle(root),
+      R     = parseFloat(cs.getPropertyValue('--r')),
+      SEG   = 30;                                  // 원기둥 면 개수
+
+  /* ── 1. 원기둥 옆면: 각 조각의 각도로 명암을 계산해 실제 홈처럼 보이게 ── */
+  var seg = (2*Math.PI*R)/SEG, frag = document.createDocumentFragment();
+  root.style.setProperty('--seg', (seg+1.3).toFixed(2)+'px');
+  for(var i=0;i<SEG;i++){
+    var a = i*(2*Math.PI/SEG),
+        lum = Math.max(0, Math.sin(a)*-0.52 + Math.cos(a)*0.85),   // 좌상단 광원
+        L   = 11 + 30*Math.pow(lum,1.5) + (i%2 ? 3.2 : -3.2),      // 홀짝 = 세로 홈
+        d   = document.createElement('i');
+    d.className = 'side';
+    d.style.background = 'hsl(2 '+(84 - lum*16).toFixed(0)+'% '+L.toFixed(1)+'%)';
+    d.style.transform = 'rotateZ('+(i*360/SEG)+'deg) translateY(-'+R+'px) rotateX(90deg)';
+    frag.appendChild(d);
+  }
+  reel.insertBefore(frag, reel.firstChild);
+
+  /* ── 2. 눈금판 텍스처: 최초 1회만 그려 background-image로 고정 ── */
+  function dialTexture(){
+    var S = 168, c = document.createElement('canvas'), x = c.getContext('2d');
+    c.width = c.height = S; var m = S/2;
+    var g = x.createRadialGradient(m*.68,m*.6,4,m,m,m);
+    g.addColorStop(0,'#FDFAF2'); g.addColorStop(.6,'#EEEAE2'); g.addColorStop(1,'#D6CEBC');
+    x.fillStyle = g; x.beginPath(); x.arc(m,m,m,0,7); x.fill();
+
+    for(var i=0;i<80;i++){                       // 잔눈금
+      var a = i*Math.PI/40, big = i%4===0;
+      x.strokeStyle = '#171413'; x.globalAlpha = big?.85:.45; x.lineWidth = big?1.6:1;
+      x.beginPath();
+      x.moveTo(m+Math.cos(a)*(m-2), m+Math.sin(a)*(m-2));
+      x.lineTo(m+Math.cos(a)*(m-(big?11:7)), m+Math.sin(a)*(m-(big?11:7)));
+      x.stroke();
+    }
+    x.globalAlpha = 1;
+    x.font = '600 15px "IBM Plex Mono",monospace';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    for(var n=1;n<=20;n++){                      // 회전한 숫자 (13~20은 레드)
+      var ang = (n/20)*Math.PI*2 - Math.PI/2, rr = m-24;
+      x.save();
+      x.translate(m+Math.cos(ang)*rr, m+Math.sin(ang)*rr);
+      x.rotate(ang+Math.PI/2);
+      x.fillStyle = n>12 ? '#7A0706' : '#171413';
+      x.fillText(n,0,0); x.restore();
+    }
+    x.fillStyle = '#B99242';                     // 황동 허브
+    x.beginPath(); x.arc(m,m,12,0,7); x.fill();
+    x.fillStyle = '#2A2320';
+    x.beginPath(); x.arc(m-4.5,m,2.6,0,7); x.arc(m+4.5,m,2.6,0,7); x.fill();
+    return c.toDataURL('image/png');
+  }
+
+  /* ── 3. 테이프 텍스처: 1타일만 그리고 repeat-y ── */
+  function tapeTexture(){
+    var W = 50, H = 140, c = document.createElement('canvas'), x = c.getContext('2d');
+    c.width = W; c.height = H;
+    x.fillStyle = '#E4B437'; x.fillRect(0,0,W,H);
+    for(var i=0;i<14;i++){                        // 가로 눈금
+      var y = H - i*10 - 5, big = i%5===0;
+      x.fillStyle = '#171413'; x.globalAlpha = big?.85:.5;
+      x.fillRect(0, y, big?18:10, big?1.6:1.1);
+    }
+    x.globalAlpha = 1;
+    x.save();                                     // 세로로 선 붉은 숫자
+    x.translate(W-11, H/2); x.rotate(-Math.PI/2);
+    x.fillStyle = '#7A0706'; x.font = '600 17px "IBM Plex Mono",monospace';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('10',0,0); x.restore();
+    return c.toDataURL('image/png');
+  }
+
+  root.style.setProperty('--dial-tex', 'url('+dialTexture()+')');
+  root.style.setProperty('--tape-tex', 'url('+tapeTexture()+')');
+
+  /* ── 4. 스크롤 연동 ── */
+  var MAX = 300, idle = 0, queued = false;
+  function sizeMax(){ MAX = Math.min(300, innerHeight*0.46); }
+  sizeMax();
+
+  function draw(){
+    queued = false;
+    var doc = document.documentElement,
+        max = doc.scrollHeight - doc.clientHeight,
+        f   = max > 0 ? Math.min(1, Math.max(0, scrollY/max)) : 0,
+        len = f*MAX;
+    root.style.setProperty('--len', len.toFixed(1)+'px');
+    root.style.setProperty('--spin', (f*1080).toFixed(1)+'deg');
+    read.firstChild.nodeValue = Math.round(f*100);
+    root.classList.toggle('on', f > 0.005);
+    clearTimeout(idle);
+    idle = setTimeout(function(){ root.classList.toggle('on', false); }, 1500);
+  }
+  addEventListener('scroll', function(){
+    if(!queued){ queued = true; requestAnimationFrame(draw); }
+  }, {passive:true});
+  addEventListener('resize', function(){ sizeMax(); draw(); }, {passive:true});
+
+  hit.addEventListener('click', function(){
+    scrollTo({top:0, behavior:'smooth'});
+  });
+
+  draw();
+})();
+</script>

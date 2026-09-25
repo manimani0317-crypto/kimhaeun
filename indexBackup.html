@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kimhaeun</title>
+
+<!--
+  임시 입구 — 시연용 책상 장면.
+  미싱 앞에 지금까지 만든 오브젝트(바늘꽂이 · 실패 · 단추 두 개)를 모아 두고,
+  마우스를 올리면 각자 반응한다.
+
+    단추     들리고, 커서 쪽으로 기울고, 광이 한 번 지나간다
+    실패     앞으로 살짝 굴렀다가 돌아온다
+    바늘꽂이 말랑하게 눌렸다 튕긴다
+    미싱     뒤에서 천천히 바느질한다
+
+  드래그로 둘러보고, 휠로 확대한다.
+  주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.  예) npx serve
+  크기는 실제 비율보다 작은 물건들을 조금 키웠다 — 시연용.
+-->
+
+<style>
+  :root { --black: #171413; --faint: rgba(238, 234, 226, .42); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(ellipse at 50% 35%, #2a2422, var(--black) 70%);
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+  }
+  /* 커서 — 컨셉대로 빨간 점 */
+  #stage {
+    position: fixed; inset: 0; touch-action: none;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='9' cy='9' r='5' fill='%237A0706' stroke='%23EEEAE2' stroke-width='1.5'/%3E%3C/svg%3E") 9 9, auto;
+  }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .caption {
+    position: fixed; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); margin: 0;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); pointer-events: none; white-space: nowrap;
+  }
+</style>
+
+<div id="stage"></div>
+<p class="caption">Hover the objects · Drag to look around</p>
+
+<script type="module">
+  import { createSewingMachine } from './assets/main/sewingMachine/sewingMachine.js';
+  import { createRedButton, createCreamButton, createButtonRig } from './assets/main/button/buttonFinal.js';
+  import { createThreadSpool } from './assets/main/threadSpool/threadSpool.js';
+  import { createPinCushion } from './assets/main/pinCushion/pinCushion.js';
+
+  const stage = document.getElementById('stage');
+  const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── 렌더러 · 조명 ──────────────────────────── */
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = .95;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, 5, 6000);
+
+  (function environment() {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#6a6460'); gr.addColorStop(.3, '#fff8ee');
+    gr.addColorStop(.45, '#8a8480'); gr.addColorStop(.65, '#2a2624'); gr.addColorStop(1, '#0e0c0c');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromEquirectangular(tex).texture;
+    pm.dispose(); tex.dispose();
+  })();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2220, .35));
+  const key = new THREE.DirectionalLight(0xfff2e4, 3.2);          // 왼쪽 위에서
+  key.position.set(-420, 700, 380);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  Object.assign(key.shadow.camera, { left: -450, right: 450, top: 450, bottom: -450, near: 200, far: 2000 });
+  key.shadow.bias = -.0012;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffe8e0, .45);
+  fill.position.set(400, 250, 600);
+  scene.add(fill);
+
+  /* 그림자를 받는 책상 — 색은 배경이 비치게 투명, 그림자만 */
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.ShadowMaterial({ opacity: .35 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  /* ── 오브젝트 ───────────────────────────────── */
+  /* 미싱 — 원점이 왼쪽 뒤 바닥 모서리라 가운데로 옮기고, 고무발이 책상에 닿게 올린다 */
+  const sewing = createSewingMachine(THREE, { sewSpeed: 2.2 });
+  sewing.machine.position.set(-200, 11.5, -110);
+  scene.add(sewing.machine);
+
+  /* 미싱 앞에 옹기종기 */
+  const spool = createThreadSpool(THREE, scene, { x: 15, z: 150, size: 32, turn: .35 });
+  const redButton = createButtonRig(THREE, scene, createRedButton(THREE), { x: 165, z: 205, size: 30, spin: .3 });
+  const flowerButton = createButtonRig(THREE, scene, createCreamButton(THREE), { x: 75, z: 265, size: 24, spin: 1.1 });
+
+  /* 바늘꽂이 — 호버하면 말랑하게 눌렸다 튕긴다 */
+  const cushion = new THREE.Group();
+  const cushionModel = createPinCushion(THREE);
+  cushion.add(cushionModel);
+  cushion.position.set(-160, 0, 190);
+  cushion.rotation.y = .28;
+  cushion.scale.setScalar(54);
+  scene.add(cushion);
+  const squish = { value: 0, target: 0, v: 0 };
+
+  /* ── 호버 ───────────────────────────────────── */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const targets = [
+    { name: 'red', obj: redButton.group },
+    { name: 'flower', obj: flowerButton.group },
+    { name: 'spool', obj: spool.hitTarget },
+    { name: 'cushion', obj: cushion }
+  ];
+  let hovered = null;
+
+  function setHover(name) {
+    if (name === hovered) return;
+    const was = hovered;
+    hovered = name;
+    redButton.setHover(name === 'red');
+    flowerButton.setHover(name === 'flower');
+    spool.setHover(name === 'spool');
+    squish.target = name === 'cushion' ? 1 : 0;
+    if (name === 'cushion' && was !== 'cushion' && !reduceMotion) squish.v += 9;   // 닿는 순간 한 번 튕긴다
+  }
+
+  /* ── 시점 ───────────────────────────────────── */
+  const target = new THREE.Vector3(0, 95, 90);
+  const cam = { az: .1, pol: 1.1, dist: 1250 };
+  function place() {
+    cam.pol = Math.max(.35, Math.min(1.45, cam.pol));
+    cam.dist = Math.max(550, Math.min(2200, cam.dist));
+    camera.position.set(
+      target.x + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az),
+      target.y + cam.dist * Math.cos(cam.pol),
+      target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
+    camera.lookAt(target);
+  }
+  place();
+
+  let drag = null, moved = 0;
+  stage.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; moved = 0; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e => {
+    const r = renderer.domElement.getBoundingClientRect();
+    if (drag) {
+      const dx = e.clientX - drag[0], dy = e.clientY - drag[1];
+      moved += Math.abs(dx) + Math.abs(dy);
+      cam.az -= dx * .006; cam.pol -= dy * .006;
+      drag = [e.clientX, e.clientY]; place();
+      return;
+    }
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    let best = null;
+    for (const t of targets) {
+      const h = ray.intersectObject(t.obj, true)[0];
+      if (h && (!best || h.distance < best.d)) best = { name: t.name, d: h.distance, p: h.point };
+    }
+    setHover(best ? best.name : null);
+    if (best?.name === 'red') redButton.lean(best.p);
+    if (best?.name === 'flower') flowerButton.lean(best.p);
+  });
+  const end = () => { drag = null; };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  stage.addEventListener('pointerleave', () => setHover(null));
+  stage.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 1 ? 30 / Math.max(w / h, .5) : 30;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+
+  /* ── 루프 ───────────────────────────────────── */
+  let prev = performance.now();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
+    sewing.update(dt);
+    redButton.update(dt);
+    flowerButton.update(dt);
+    spool.update(dt);
+
+    /* 바늘꽂이 — 탱탱한 스프링. 눌리면 옆으로 퍼진다 */
+    if (reduceMotion) { squish.value = squish.target; squish.v = 0; }
+    else {
+      squish.v += (180 * (squish.target - squish.value) - 9 * squish.v) * dt;
+      squish.value += squish.v * dt;
+    }
+    const s = squish.value * .12;
+    cushionModel.scale.set(1 + s * .5, 1 - s, 1 + s * .5);
+
+    renderer.render(scene, camera);
+  });
+</script>
