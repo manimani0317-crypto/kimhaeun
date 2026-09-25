@@ -73,8 +73,10 @@
   const tape = createTapeMeasure(THREE, scene, { x: 0, z: 0, size: 1, turn: 0 });
 
   /* ── 시점 — 눕혀 둔 물건이라 위에서 비스듬히 내려다본다. 만지기 전엔 천천히 돈다 ── */
-  const target = new THREE.Vector3(1.5, .15, 0);         // 케이스와 풀린 띠 사이
-  const cam = { az: 0, pol: .95, dist: 10 };
+  const target = new THREE.Vector3(1.75, .15, 0);        // 케이스(x -1)와 다 풀린 띠 끝(x 4.5) 한가운데
+  /* 세로로 긴 화면에선 물러나서 본다 — 케이스와 다 풀린 띠가 가로로 길어 옆이 잘린다 */
+  const aspect0 = stage.clientWidth / Math.max(1, stage.clientHeight);
+  const cam = { az: 0, pol: .95, dist: 10 / Math.min(1, Math.max(aspect0, .45)) ** .6 };
   const q = new URLSearchParams(location.search);
   if (q.has('az')) cam.az = Number(q.get('az')) * Math.PI / 180;
   let idle = !q.has('az') && !matchMedia('(prefers-reduced-motion: reduce)').matches;

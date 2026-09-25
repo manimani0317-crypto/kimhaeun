@@ -54,7 +54,6 @@
 
   const stage = document.getElementById('stage');
   const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
-  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ── 렌더러 · 조명 ──────────────────────────── */
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -113,15 +112,17 @@
   const redButton = createButtonRig(THREE, scene, createRedButton(THREE), { x: 165, z: 205, size: 30, spin: .3 });
   const flowerButton = createButtonRig(THREE, scene, createCreamButton(THREE), { x: 75, z: 265, size: 24, spin: 1.1 });
 
-  /* 바늘꽂이 — 호버하면 말랑하게 눌렸다 튕긴다 */
+  /* 바늘꽂이 — 호버하면 통통 튀고 진주핀이 들린다. 누르면 진주핀이 코처럼 꽂힌 뒤 페이지로.
+     튀는 움직임은 pinCushion.js 안에 있다 (여기서 따로 흔들지 않는다) */
+  const PIN_LINK = null;                                  // 왈가왈BOT 페이지가 생기면 주소를 넣는다
   const cushion = new THREE.Group();
-  const cushionModel = createPinCushion(THREE);
-  cushion.add(cushionModel);
+  const pinCushion = createPinCushion(THREE);
+  cushion.add(pinCushion.root);
   cushion.position.set(-160, 0, 190);
   cushion.rotation.y = .28;
   cushion.scale.setScalar(54);
+  pinCushion.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   scene.add(cushion);
-  const squish = { value: 0, target: 0, v: 0 };
 
   /* ── 호버 ───────────────────────────────────── */
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -133,15 +134,26 @@
   ];
   let hovered = null;
 
+  let opening = false;                                    // 진주핀이 날아가는 동안은 호버를 받지 않는다
   function setHover(name) {
+    if (opening) name = null;
     if (name === hovered) return;
-    const was = hovered;
     hovered = name;
     redButton.setHover(name === 'red');
     flowerButton.setHover(name === 'flower');
     spool.setHover(name === 'spool');
-    squish.target = name === 'cushion' ? 1 : 0;
-    if (name === 'cushion' && was !== 'cushion' && !reduceMotion) squish.v += 9;   // 닿는 순간 한 번 튕긴다
+    pinCushion.setHover(name === 'cushion');
+    stage.style.cursor = name === 'cushion' ? 'pointer' : '';
+  }
+
+  /* 바늘꽂이 누르기 — 진주핀이 코 자리에 꽂힌 뒤 페이지로. 페이지가 없으면 잠시 뒤 되돌린다 */
+  function openCushion() {
+    opening = true;
+    setHover(null);
+    pinCushion.activate(() => {
+      if (PIN_LINK) { location.href = PIN_LINK; return; }
+      setTimeout(() => { pinCushion.reset(); opening = false; }, 1200);
+    });
   }
 
   /* ── 시점 ───────────────────────────────────── */
@@ -181,7 +193,12 @@
     if (best?.name === 'flower') flowerButton.lean(best.p);
   });
   const end = () => { drag = null; };
-  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  stage.addEventListener('pointerup', () => {
+    const click = drag && moved < 5;                      // 끌어서 돌린 건 클릭이 아니다
+    end();
+    if (click && hovered === 'cushion') openCushion();
+  });
+  stage.addEventListener('pointercancel', end);
   stage.addEventListener('pointerleave', () => setHover(null));
   stage.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
 
@@ -203,15 +220,7 @@
     redButton.update(dt);
     flowerButton.update(dt);
     spool.update(dt);
-
-    /* 바늘꽂이 — 탱탱한 스프링. 눌리면 옆으로 퍼진다 */
-    if (reduceMotion) { squish.value = squish.target; squish.v = 0; }
-    else {
-      squish.v += (180 * (squish.target - squish.value) - 9 * squish.v) * dt;
-      squish.value += squish.v * dt;
-    }
-    const s = squish.value * .12;
-    cushionModel.scale.set(1 + s * .5, 1 - s, 1 + s * .5);
+    pinCushion.update(dt);
 
     renderer.render(scene, camera);
   });
