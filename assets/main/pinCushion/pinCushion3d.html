@@ -17,6 +17,13 @@
   body { margin: 0; background: var(--black); font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; overflow: hidden; }
   #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
   #stage.isDragging { cursor: grabbing; }
+  #stage.isHover { cursor: pointer; }
+  .toast {
+    position: fixed; left: 50%; top: 24px; transform: translateX(-50%); margin: 0;
+    padding: 8px 14px; border-radius: 8px; background: rgba(23, 20, 19, .92);
+    border: 1px solid rgba(238, 234, 226, .18); color: #EEEAE2; font-size: 11px; letter-spacing: .04em;
+  }
+  .toast[hidden] { display: none; }
   #stage canvas { display: block; width: 100%; height: 100%; }
   .caption {
     position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px));
@@ -24,13 +31,54 @@
     font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
     color: var(--faint); pointer-events: none; white-space: nowrap;
   }
+
+  /* 조절판 — E 키로 열고 닫는다 */
+  .tuner {
+    position: fixed; top: 16px; right: 16px; width: 260px; max-height: calc(100% - 32px); overflow: auto;
+    padding: 14px 16px; border-radius: 10px;
+    background: rgba(23, 20, 19, .92); border: 1px solid rgba(238, 234, 226, .14);
+    color: #EEEAE2; font-size: 11px; letter-spacing: .04em;
+  }
+  .tuner[hidden] { display: none; }
+  .tuner h2 { margin: 14px 0 6px; font-size: 10.5px; font-weight: 500; letter-spacing: .14em; color: var(--faint); }
+  .tuner h2:first-child { margin-top: 0; }
+  .tuner label { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; margin: 8px 0; }
+  .tuner label span { color: rgba(238, 234, 226, .75); }
+  .tuner output { text-align: right; font-variant-numeric: tabular-nums; }
+  .tuner input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: #7A0706; }
+  .tuner pre {
+    margin: 12px 0 8px; padding: 8px; border-radius: 6px; background: rgba(0, 0, 0, .35);
+    white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 10.5px; color: rgba(238, 234, 226, .85);
+  }
+  .tuner .row { display: flex; gap: 6px; }
+  .tuner button {
+    flex: 1; padding: 7px 0; border-radius: 6px; cursor: pointer; font: inherit;
+    color: #EEEAE2; background: rgba(238, 234, 226, .08); border: 1px solid rgba(238, 234, 226, .18);
+  }
+  .tuner button:hover { background: rgba(238, 234, 226, .16); }
 </style>
 
 <div id="stage"></div>
-<p class="caption">Drag to orbit · Scroll to zoom</p>
+<p class="caption">Drag to orbit · Scroll to zoom · Click to open · E 조절판</p>
+<p class="toast" id="toast" hidden>왈가왈BOT 페이지로 넘어갈 자리 — 아직 페이지가 없어 제자리로 돌아갑니다</p>
+
+<!-- 모양 조절판 — 슬라이더로 바꾸면 바로 반영된다. 맞춘 값은 '코드 복사'로 pinCushion.js 에 붙여 넣는다 -->
+<aside class="tuner" id="tuner">
+  <h2>귀</h2>
+  <div data-group="EAR"></div>
+  <h2>몸통</h2>
+  <div data-group="BODY"></div>
+  <h2>바닥 진주핀</h2>
+  <div data-group="PEARL"></div>
+  <pre id="tunerCode"></pre>
+  <div class="row">
+    <button type="button" id="tunerCopy">코드 복사</button>
+    <button type="button" id="tunerReset">처음 값</button>
+  </div>
+</aside>
 
 <script type="module">
-  import { createPinCushion } from './pinCushion.js';
+  import { createPinCushion, EAR, BODY, PEARL } from './pinCushion.js';
 
   const stage = document.getElementById('stage');
   const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
@@ -67,8 +115,75 @@
   rim.position.set(3, 3, -4);
   scene.add(rim);
 
-  const model = createPinCushion(THREE);
-  scene.add(model);
+  const pc = createPinCushion(THREE);
+  scene.add(pc.root);
+
+  /* ── 조절판 ── 슬라이더를 움직이면 EAR·BODY 값을 바꾸고 모양만 다시 만든다 */
+  const SLIDERS = {
+    EAR: [
+      ['X', '정면 좌우 폭', .2, .8],  ['Y', '정면 높이', .2, 1],   ['Z', '옆면 두께', .2, .9],
+      ['TAPER', '위쪽 좁아짐', -.3, .6], ['TILT', '기울기', 0, .8],
+      ['PX', '자리 — 옆', .8, 1.6],    ['PY', '자리 — 높이', .3, 1.2],
+      ['SLANT', '스티치 기울기', -1.57, 1.57],            // ±90° — 양쪽 끝까지 눕힐 수 있다
+      ['LINES', '스티치 줄 수', 1, 6, 1], ['GAP', '스티치 간격', .15, .6]
+    ],
+    BODY: [
+      ['B', '앞뒤 폭 비율', .7, 1.1], ['H', '높이', 1, 2], ['N', '모서리 (클수록 네모)', 2, 4],
+      ['BR', '바닥 폭 (작을수록 동그랗게)', .4, 1], ['BH', '아래 둥근 부분 높이', .05, .6],
+      ['BS', '아래 둥근 정도 (1 사선 · 2 완만 · 3+ 동그랗게)', 1, 5]
+    ],
+    PEARL: [
+      ['PX', '자리 — 좌우', -2.5, 2.5], ['PZ', '자리 — 앞뒤', -1.5, 2],
+      ['ANGLE', '방향', -3.14, 3.14],   ['LEN', '바늘 길이', .5, 2],
+      ['HW', '머리 — 가로(긴 쪽)', .05, .25], ['HL', '머리 — 세로', .03, .2], ['HH', '머리 — 높이', .03, .15],
+      ['NY', '클릭하면 꽂히는 코 높이', .2, 1.3]
+    ]
+  };
+  const TARGET = { EAR, BODY, PEARL };
+  const initial = Object.fromEntries(Object.entries(TARGET).map(([k, o]) => [k, { ...o }]));
+  const fmt = v => { const s = (+v.toFixed(3)).toString(); return s.replace(/^(-?)0\./, '$1.'); };
+  const codeText = () => Object.entries(TARGET)
+    .map(([name, o]) => `export const ${name} = { ${Object.entries(o).map(([k, v]) => `${k}: ${fmt(v)}`).join(', ')} };`)
+    .join('\n');
+  const tunerCode = document.getElementById('tunerCode');
+  const inputs = [];
+  let pending = false;
+  const refresh = () => {                               // 한 프레임에 한 번만 다시 만든다
+    tunerCode.textContent = codeText();
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; pc.rebuild(); });
+  };
+  for (const [group, list] of Object.entries(SLIDERS)) {
+    const box = document.querySelector(`[data-group="${group}"]`);
+    for (const [key, label, min, max, step = .005] of list) {   // 줄 수처럼 정수인 값은 step 1
+      const row = document.createElement('label');
+      row.innerHTML = `<span>${label} <small>${key}</small></span><output></output>
+        <input type="range" min="${min}" max="${max}" step="${step}">`;
+      const input = row.querySelector('input'), out = row.querySelector('output');
+      const sync = () => { input.value = TARGET[group][key]; out.textContent = fmt(TARGET[group][key]); };
+      input.addEventListener('input', () => {
+        TARGET[group][key] = +input.value; out.textContent = fmt(+input.value); refresh();
+      });
+      sync();
+      inputs.push(sync);
+      box.appendChild(row);
+    }
+  }
+  tunerCode.textContent = codeText();
+  document.getElementById('tunerCopy').addEventListener('click', async e => {
+    const btn = e.currentTarget, text = codeText();
+    try { await navigator.clipboard.writeText(text); }
+    catch { const r = document.createRange(); r.selectNodeContents(tunerCode);
+            getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+    btn.textContent = '복사됨'; setTimeout(() => btn.textContent = '코드 복사', 1200);
+  });
+  document.getElementById('tunerReset').addEventListener('click', () => {
+    for (const k in TARGET) Object.assign(TARGET[k], initial[k]);
+    inputs.forEach(s => s()); refresh();
+  });
+  const tuner = document.getElementById('tuner');
+  addEventListener('keydown', e => { if (e.key === 'e' || e.key === 'E') tuner.hidden = !tuner.hidden; });
 
   /* 바닥 그림자 — 방사형 그라데이션 한 장 */
   const shadow = new THREE.Mesh(
@@ -104,15 +219,44 @@
       target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
     camera.lookAt(target);
   }
-  let drag = null;
-  stage.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; idle = false; stage.setPointerCapture(e.pointerId); stage.classList.add('isDragging'); });
+  /* ── 호버·클릭 ──
+     바늘꽂이 위에 올리면 진주핀이 들리고, 누르면(끌지 않고 뗀 경우만) 코 자리에 꽂힌 뒤
+     연결 페이지로 넘어간다. 아직 왈가왈BOT 페이지가 없어서 ?href=주소 를 붙였을 때만 이동한다 */
+  const LINK = q.get('href');
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let hovered = false, busy = false;
+  function pickAt(e) {
+    const r = stage.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const on = !busy && ray.intersectObject(pc.hitTarget, true).length > 0;
+    if (on !== hovered) { hovered = on; pc.setHover(on); stage.classList.toggle('isHover', on); }
+  }
+  const toast = document.getElementById('toast');
+  function open() {
+    busy = true; hovered = false; pc.setHover(false); stage.classList.remove('isHover');
+    pc.activate(() => {
+      if (LINK) { location.href = LINK; return; }
+      toast.hidden = false;                             // 페이지가 생기기 전까지는 안내만 하고 되돌린다
+      setTimeout(() => { toast.hidden = true; pc.reset(); busy = false; }, 1600);
+    });
+  }
+
+  let drag = null, down = null;
+  stage.addEventListener('pointerdown', e => { drag = down = [e.clientX, e.clientY]; idle = false; stage.setPointerCapture(e.pointerId); stage.classList.add('isDragging'); });
   stage.addEventListener('pointermove', e => {
-    if (!drag) return;
+    if (!drag) { pickAt(e); return; }
     cam.az -= (e.clientX - drag[0]) * .008; cam.pol -= (e.clientY - drag[1]) * .008;
     drag = [e.clientX, e.clientY]; place();
   });
   const end = () => { drag = null; stage.classList.remove('isDragging'); };
-  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  stage.addEventListener('pointerup', e => {
+    const moved = down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5;   // 돌리려고 끈 건 클릭이 아니다
+    end(); down = null;
+    pickAt(e);
+    if (!moved && hovered) open();
+  });
+  stage.addEventListener('pointercancel', end);
   stage.addEventListener('wheel', e => { e.preventDefault(); idle = false; cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
 
   function resize() {
@@ -129,6 +273,7 @@
   renderer.setAnimationLoop(now => {
     const dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
     if (idle) { cam.az += dt * .25; place(); }
+    pc.update(dt);
     renderer.render(scene, camera);
   });
 </script>

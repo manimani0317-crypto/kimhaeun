@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tape Measure 3D</title>
+
+<!--
+  자동 줄자 3D 확인용 페이지. 모델은 tapeMeasure.js 에 있다.
+  드래그로 돌려 보고, 휠로 확대한다. 케이스에 마우스를 올리면 띠가 풀린다.
+  주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.
+  ?az=각도 를 붙이면 그 방향에서 멈춰 보여 준다 (0 정면).
+-->
+
+<style>
+  :root { --black: #171413; --faint: rgba(238, 234, 226, .42); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--black); font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; overflow: hidden; }
+  #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+  #stage.isDragging { cursor: grabbing; }
+  #stage.isHover { cursor: pointer; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .caption {
+    position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); margin: 0;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); pointer-events: none; white-space: nowrap;
+  }
+</style>
+
+<div id="stage"></div>
+<p class="caption">Drag to orbit · Scroll to zoom · Hover the case</p>
+
+<script type="module">
+  import { createTapeMeasure } from './tapeMeasure.js';
+
+  const stage = document.getElementById('stage');
+  const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, .1, 100);
+
+  /* 스튜디오 반사 + 조명 — 바늘꽂이 확인 페이지와 같다 */
+  (function environment() {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#6a6460'); gr.addColorStop(.3, '#fff8ee');
+    gr.addColorStop(.45, '#8a8480'); gr.addColorStop(.65, '#2a2624'); gr.addColorStop(1, '#0e0c0c');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromEquirectangular(tex).texture;
+    pm.dispose(); tex.dispose();
+  })();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3230, .5));
+  const key = new THREE.DirectionalLight(0xfff2e4, 2.2);
+  key.position.set(-3, 6, 4);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, .8);
+  rim.position.set(3, 3, -4);
+  scene.add(rim);
+
+  /* 모델 — 스스로 장면에 들어간다. 띠가 +x 쪽으로 뻗으므로 원점에 둔다 */
+  const tape = createTapeMeasure(THREE, scene, { x: 0, z: 0, size: 1, turn: 0 });
+
+  /* ── 시점 — 눕혀 둔 물건이라 위에서 비스듬히 내려다본다. 만지기 전엔 천천히 돈다 ── */
+  const target = new THREE.Vector3(1.5, .15, 0);         // 케이스와 풀린 띠 사이
+  const cam = { az: 0, pol: .95, dist: 10 };
+  const q = new URLSearchParams(location.search);
+  if (q.has('az')) cam.az = Number(q.get('az')) * Math.PI / 180;
+  let idle = !q.has('az') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function place() {
+    cam.pol = Math.max(.15, Math.min(Math.PI / 2 - .02, cam.pol));   // 책상 밑으로는 안 내려간다
+    cam.dist = Math.max(4, Math.min(20, cam.dist));
+    camera.position.set(
+      target.x + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az),
+      target.y + cam.dist * Math.cos(cam.pol),
+      target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
+    camera.lookAt(target);
+  }
+
+  /* ── 호버 — 케이스 위에 올리면 들리면서 띠가 풀리고, 커서 쪽으로 기운다 ── */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const desk = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), deskPoint = new THREE.Vector3();
+  let hovered = false;
+  function pickAt(e) {
+    const r = stage.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const on = ray.intersectObject(tape.hitTarget, true).length > 0;
+    if (on !== hovered) { hovered = on; tape.setHover(on); stage.classList.toggle('isHover', on); }
+    if (on && ray.ray.intersectPlane(desk, deskPoint)) tape.lean(deskPoint);
+  }
+
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; idle = false; stage.setPointerCapture(e.pointerId); stage.classList.add('isDragging'); });
+  stage.addEventListener('pointermove', e => {
+    if (!drag) { pickAt(e); return; }
+    cam.az -= (e.clientX - drag[0]) * .008; cam.pol -= (e.clientY - drag[1]) * .008;
+    drag = [e.clientX, e.clientY]; place();
+  });
+  const end = e => { drag = null; stage.classList.remove('isDragging'); if (e) pickAt(e); };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', () => end());
+  stage.addEventListener('pointerleave', () => { if (hovered) { hovered = false; tape.setHover(false); stage.classList.remove('isHover'); } });
+  stage.addEventListener('wheel', e => { e.preventDefault(); idle = false; cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 1 ? 30 / Math.max(w / h, .5) : 30;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize(); place();
+
+  let prev = performance.now();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
+    if (idle) { cam.az += dt * .25; place(); }
+    tape.update(dt);
+    renderer.render(scene, camera);
+  });
+</script>
