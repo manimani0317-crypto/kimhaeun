@@ -2,60 +2,260 @@
 <html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>kimhaeun</title>
+<title>KIM HAEUN — Portfolio</title>
 
 <!--
-  임시 입구 — 시연용 책상 장면.
-  미싱 앞에 지금까지 만든 오브젝트(바늘꽂이 · 실패 · 단추 두 개)를 모아 두고,
-  마우스를 올리면 각자 반응한다.
+  메인 화면 — 책상을 위에서 내려다본 장면.
 
-    단추     들리고, 커서 쪽으로 기울고, 광이 한 번 지나간다
-    실패     앞으로 살짝 굴렀다가 돌아온다
-    바늘꽂이 말랑하게 눌렸다 튕긴다
-    미싱     뒤에서 천천히 바느질한다
+  두 곳에서 가져와 합쳤다.
+    조명 · 명암 · 색감   예전 인덱스(시연용 책상) 그대로 — 환경 반사, 왼쪽 위 주광과 부드러운 그림자,
+                         배경이 비치는 책상. 펠트 책상·안개는 쓰지 않는다
+    구도 · 인터랙션      메인 장면(assets/main/mainScene) — 오브젝트 자리(SLOTS), 책상 뷰·고개 든 뷰(VIEW),
+                         커서를 화면 위쪽으로 올리면 고개를 들어 미싱이 보이는 동작, 글자·목록·빨간 점 커서
 
-  드래그로 둘러보고, 휠로 확대한다.
+  자리값은 mainScene.js 에서 읽어만 온다 — 자리를 옮기려면 거기 SLOTS·VIEW 를 고친다.
+  메인 장면은 1 = 1cm, 오브젝트 모델은 1 = 1mm 라서 자리값을 10 배(K)로 옮겨 쓴다.
+
+  오브젝트
+    바늘꽂이  통통 튀고 진주핀이 들린다. 누르면 진주핀이 코처럼 꽂힌 뒤 페이지로
+    줄자      들리면서 띠가 풀린다
+    실패      앞으로 살짝 굴렀다가 돌아온다
+    단추      들리고, 커서 쪽으로 기울고, 광이 한 번 지나간다
+    미싱      책상 안쪽 끝 — 고개를 들어야 보인다. 천천히 바느질한다
+  아직 없는 자리(재단가위·원단 스와치·거울)는 M 키로 자리 표시를 켜 볼 수 있다.
+
   주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.  예) npx serve
-  크기는 실제 비율보다 작은 물건들을 조금 키웠다 — 시연용.
 -->
 
+<!-- 폰트 — Figma 메인 프레임과 같은 것.
+     Digital Numbers(KIM HAEUN) · Copse(목차·태그·menu)는 assets/fonts 의 파일,
+     Cormorant Garamond 는 Google Fonts, Pretendard 는 눈누(jsDelivr) — 아래 @font-face -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;700&display=swap">
+
 <style>
-  :root { --black: #171413; --faint: rgba(238, 234, 226, .42); }
+  @font-face {
+    font-family: "Digital Numbers";
+    /* Stephan Ahlf, 2015. 가벼운 순서로 — woff2(5KB) → woff(8KB) → ttf(21KB) */
+    src: url("assets/fonts/DigitalNumbers-Regular.woff2") format("woff2"),
+         url("assets/fonts/DigitalNumbers-Regular.woff") format("woff"),
+         url("assets/fonts/DigitalNumbers-Regular.ttf") format("truetype");
+    font-display: swap;
+  }
+  /* Pretendard — 눈누. 굵기마다 한 벌. 페이지에서 쓰는 굵기(지금은 400)만 실제로 내려받는다 */
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2') format('woff2'); font-weight: 100; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2') format('woff2'); font-weight: 200; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2') format('woff2'); font-weight: 300; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2') format('woff2'); font-weight: 800; font-display: swap; }
+  @font-face { font-family: 'Pretendard'; src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2') format('woff2'); font-weight: 900; font-display: swap; }
+  @font-face {
+    font-family: "Copse";
+    src: url("assets/fonts/Copse-Regular.woff2") format("woff2"),
+         url("assets/fonts/Copse-Regular.woff") format("woff");
+    font-weight: 400;
+    font-display: swap;
+  }
+  :root {
+    --black: #171413; --red: #7A0706; --redHi: #C4140E; --cream: #EEEAE2;
+    --faint: rgba(238, 234, 226, .42);
+  }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    margin: 0;
+    margin: 0; color: var(--cream);
     background: radial-gradient(ellipse at 50% 35%, #2a2422, var(--black) 70%);
     font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    overflow: hidden;
+    overflow: hidden; cursor: none;
   }
-  /* 커서 — 컨셉대로 빨간 점 */
-  #stage {
-    position: fixed; inset: 0; touch-action: none;
-    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='9' cy='9' r='5' fill='%237A0706' stroke='%23EEEAE2' stroke-width='1.5'/%3E%3C/svg%3E") 9 9, auto;
-  }
+  #stage { position: fixed; inset: 0; touch-action: none; }
   #stage canvas { display: block; width: 100%; height: 100%; }
-  .caption {
-    position: fixed; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-    transform: translateX(-50%); margin: 0;
-    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--faint); pointer-events: none; white-space: nowrap;
+
+  /* ── 화면 위에 얹히는 글자 ── */
+  .ui { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+  .ui > * { position: absolute; }
+
+  /* ── Figma 메인 프레임(1920 × 1080) 그대로 ─────────────────────
+     Figma 의 px 좌표를 그대로 적고, 묶음마다 붙어 있는 모서리를 기준으로 같은 비율(--u)로 줄인다.
+     화면 비율이 달라도 이름·목차는 오른쪽 위에, 태그·Portfolio·menu 는 왼쪽 아래에 붙어 있다.
+     --u = min(화면 폭 / 1920, 화면 높이 / 1080) — JS 가 넣는다 */
+  .art { width: 1920px; height: 1080px; transform: scale(var(--u, 1)); }
+  .art > * { position: absolute; margin: 0; }
+  .art.tr { top: 0; right: 0; transform-origin: 100% 0; }
+  .art.bl { bottom: 0; left: 0; transform-origin: 0 100%; }
+  .fx { display: flex; align-items: center; justify-content: center; }   /* 돌아간 요소를 감싸는 상자 */
+  .fx > * { flex: none; }
+
+  /* 고개를 들면 책상 화면의 글자는 물러난다 — 다른 곳을 보고 있으니까. menu 는 남는다 */
+  .art.tr, .art.title { opacity: calc(1 - var(--gaze, 0) * .88); }
+
+  /* 이름과 목차 */
+  .brandName {
+    left: 1638.55px; top: 57px; white-space: nowrap;
+    font: 400 30px/normal "Digital Numbers", "IBM Plex Mono", monospace;
+    color: #F5EADF; letter-spacing: -3px; text-shadow: 0 -1px 14px #FFEDDA;
   }
+  .toc { left: 1643.16px; white-space: nowrap; font: 400 16px/normal "Copse", Georgia, serif; color: #FFCA94; }
+
+  /* UX/UI Designer — 검붉은 찢긴 테이프 두 겹 위에 글자. 둘 다 -6.96° */
+  .tape { width: 375.832px; height: 123.146px; }
+  .tape img { width: 366.985px; height: 79px; display: block; }
+  .tapeBack  { left: 120.25px; top: 687.65px; }
+  .tapeBack img  { transform: rotate(173.04deg) scaleY(-1); }   /* 뒤집어 붙여 양 끝이 다 찢겨 보인다 */
+  .tapeFront { left: 146.08px; top: 684.5px; }
+  .tapeFront img { transform: rotate(-6.96deg); }
+  .tagText { left: 327.1px; top: 707.7px; width: 298.158px; height: 79.437px; transform: translateX(-50%); }
+  .tagText p {
+    width: 295px; margin: 0; transform: rotate(-6.96deg); text-align: center;
+    font: 400 36px/normal "Copse", Georgia, serif;
+  }
+  .tagText.shade p { color: #000; }
+  .tagText.face p  { color: #AA8D78; }
+
+  .portfolio {
+    left: 894.83px; top: 775.49px; transform: translateX(-100%); white-space: nowrap; text-align: right;
+    font: 700 200px/1 "Cormorant Garamond", Georgia, serif;
+    color: #F5EADF; text-shadow: 0 4px 4px rgba(0, 0, 0, .25);
+  }
+  .subtitle {
+    left: 203.71px; top: 965.49px; width: 678.025px;
+    font: 400 24px/normal "Pretendard", "Apple SD Gothic Neo", sans-serif;
+    color: #F0BE8B; letter-spacing: -.96px;
+  }
+
+  /* ── menu — 왼쪽 아래 회색 폴더. 누르면 전체 목록이 나온다 ──
+     폴더 몸통(쐐기) + 기울어진 탭 + 글자. 글자는 탭의 긴 면과 같은 각도(80.5°)로 눕힌다 —
+     Figma 원본은 81.18° 라 탭과 0.68° 어긋나 있었다 */
+  .art.menu { z-index: 3; }
+  .menuBody { left: -7.84px; top: 506px; width: 76px; height: 574px; }
+  .menuBody img { width: 574px; height: 76px; display: block; transform: rotate(90deg); }
+  .menuTab { left: -13.84px; top: 714.41px; width: 122px; height: 308.437px; }
+  .menuTab div { position: relative; width: 300.439px; height: 73.424px; transform: rotate(80.5deg); }
+  .menuTab img { position: absolute; left: 6.62%; top: 0; width: 264.134px; height: 73.424px; display: block; }
+  .menuText { left: 20.16px; top: 823px; width: 67.97px; height: 133.841px; }
+  .menuText span {
+    display: block; width: 127.848px; height: 48.949px; transform: rotate(80.5deg); text-align: right;
+    font: 400 42px/normal "Copse", Georgia, serif; color: #6D6262;
+  }
+  .menuBody, .menuTab, .menuText { pointer-events: auto; cursor: none; }
+  .menu:hover .menuText span, .menu:focus-visible .menuText span { color: #4a4141; }
+  .menu:focus-visible { outline: none; }
+  .listPanel {
+    left: 0; top: 0; height: 100%; width: 320px; max-width: 84vw;
+    background: rgba(12, 10, 9, .93); border-right: 1px solid rgba(238,234,226,.14);
+    padding: 44px 30px; pointer-events: auto; overflow-y: auto;
+    transform: translateX(-100%); transition: transform .5s cubic-bezier(.2,.8,.25,1);
+    backdrop-filter: blur(8px);
+  }
+  body.listOpen .listPanel { transform: translateX(0); }
+  .listPanel h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .28em; color: var(--redHi); }
+  .listPanel .note { margin: 0 0 26px; font-size: 10.5px; line-height: 1.9; color: var(--faint); }
+  .listPanel ul { margin: 0; padding: 0; list-style: none; }
+  .listPanel li { border-top: 1px solid rgba(238,234,226,.1); }
+  .listPanel li:last-child { border-bottom: 1px solid rgba(238,234,226,.1); }
+  .listPanel button {
+    width: 100%; display: flex; gap: 12px; align-items: baseline;
+    background: none; border: 0; color: inherit; font: inherit; cursor: none;
+    padding: 14px 4px; text-align: left; transition: background .2s, padding .2s;
+  }
+  .listPanel button:hover, .listPanel button.on { background: rgba(196,20,14,.14); padding-left: 10px; }
+  .listPanel .ix { font-size: 10px; color: var(--redHi); letter-spacing: .1em; }
+  .listPanel .ko { font-size: 13px; }
+  .listPanel .pj { font-size: 10px; color: var(--faint); margin-left: auto; }
+
+  /* ── 고개 들기 안내 ── */
+  .gaze {
+    left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    font-size: 10px; letter-spacing: .18em; color: var(--faint); text-align: center; transition: opacity .4s;
+  }
+  .gaze .bar { width: 120px; height: 1px; background: rgba(238,234,226,.18); margin: 9px auto 0; }
+  .gaze .bar i { display: block; height: 100%; width: 0; background: var(--redHi); transition: width .12s linear; }
+
+  /* ── 빨간 점 커서 ── */
+  .dot {
+    position: fixed; left: 0; top: 0; z-index: 9; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+    border-radius: 50%; background: var(--redHi); pointer-events: none;
+    box-shadow: 0 0 14px rgba(196,20,14,.85);
+    transition: width .2s, height .2s, margin .2s, background .2s, box-shadow .2s;
+  }
+  body.onObject .dot {
+    width: 34px; height: 34px; margin: -17px 0 0 -17px;
+    background: rgba(196,20,14,.16); box-shadow: 0 0 0 1px var(--redHi) inset;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
 </style>
 
 <div id="stage"></div>
-<p class="caption">Hover the objects · Drag to look around</p>
+
+<div class="ui">
+  <!-- 오른쪽 위 — 이름과 목차 -->
+  <div class="art tr">
+    <p class="brandName">KIM HAEUN</p>
+    <p class="toc" style="top:120px">01 About ME</p>
+    <p class="toc" style="top:160px">02-05 UXUI Project</p>
+    <p class="toc" style="top:200px">06 package design</p>
+    <p class="toc" style="top:240px">07 ETC</p>
+  </div>
+
+  <!-- 왼쪽 아래 — 태그 · Portfolio · 부제 -->
+  <div class="art bl title">
+    <div class="tape tapeBack fx"><img src="assets/main/ui/tagTapeBack.svg" alt=""></div>
+    <div class="tape tapeFront fx"><img src="assets/main/ui/tagTapeFront.svg" alt=""></div>
+    <div class="tagText shade fx" aria-hidden="true"><p>UX/UI Designer</p></div>
+    <div class="tagText face fx"><p>UX/UI Designer</p></div>
+    <h1 class="portfolio">Portfolio</h1>
+    <p class="subtitle">조각을 이어주는 프로덕트 디자이너 김하은입니다.</p>
+  </div>
+
+  <nav class="listPanel" id="listPanel">
+    <h3>전체 목록</h3>
+    <p class="note">물건만으로는 어디를 눌러야 할지 모르는 사람을 위해<br>한곳에 다 적어둡니다. 누르면 해당 페이지로.</p>
+    <ul id="listItems"></ul>
+  </nav>
+
+  <div class="gaze" id="gazeHint">
+    커서를 화면 위로 — 고개를 듭니다
+    <div class="bar"><i id="gazeBar"></i></div>
+  </div>
+
+  <!-- 왼쪽 아래 — menu 폴더. 목록 위에 얹혀 있어서 열린 목록도 여기서 닫는다 -->
+  <div class="art bl menu" id="menu" role="button" tabindex="0" aria-label="전체 목록 열기" aria-controls="listPanel">
+    <div class="menuBody fx"><img src="assets/main/ui/menuFolder.svg" alt=""></div>
+    <div class="menuTab fx"><div><img src="assets/main/ui/menuFolderTab.svg" alt=""></div></div>
+    <div class="menuText fx"><span>menu</span></div>
+  </div>
+</div>
+
+<i class="dot" id="dot"></i>
 
 <script type="module">
+  import { SLOTS, VIEW } from './assets/main/mainScene/mainScene.js';
   import { createSewingMachine } from './assets/main/sewingMachine/sewingMachine.js';
   import { createRedButton, createCreamButton, createButtonRig } from './assets/main/button/buttonFinal.js';
   import { createThreadSpool } from './assets/main/threadSpool/threadSpool.js';
   import { createPinCushion } from './assets/main/pinCushion/pinCushion.js';
+  import { createTapeMeasure } from './assets/main/tapeMeasure/tapeMeasure.js';
+  import { createGuideBook } from './assets/main/guide/guideBook.js';
 
   const stage = document.getElementById('stage');
   const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+  const instant = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ── 렌더러 · 조명 ──────────────────────────── */
+  /* 메인 장면(1 = 1cm) → 오브젝트(1 = 1mm) */
+  const K = 10;
+  const slot = id => SLOTS.find(s => s.id === id);
+  /* 자리값 — mainScene 의 placement() 와 같은 셈. nativeRadius 는 그 모델의 기준 반지름 */
+  const place = (id, nativeRadius = 1) => {
+    const s = slot(id);
+    return { x: s.x * K, z: s.z * K, size: (s.dia / 2) * K / nativeRadius };
+  };
+
+  /* ── 렌더러 · 조명 — 예전 인덱스 그대로 ─────────────── */
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -66,7 +266,7 @@
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 5, 6000);
+  const camera = new THREE.PerspectiveCamera(VIEW.DESK.fov, 1, 5, 8000);
 
   (function environment() {
     const c = document.createElement('canvas');
@@ -86,9 +286,11 @@
   scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2220, .35));
   const key = new THREE.DirectionalLight(0xfff2e4, 3.2);          // 왼쪽 위에서
   key.position.set(-420, 700, 380);
+  key.target.position.set(0, 0, -150);                             // 책상 앞쪽부터 미싱까지 그림자가 닿게
+  scene.add(key.target);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
-  Object.assign(key.shadow.camera, { left: -450, right: 450, top: 450, bottom: -450, near: 200, far: 2000 });
+  Object.assign(key.shadow.camera, { left: -620, right: 620, top: 620, bottom: -620, near: 100, far: 2600 });
   key.shadow.bias = -.0012;
   scene.add(key);
   const fill = new THREE.DirectionalLight(0xffe8e0, .45);
@@ -96,131 +298,231 @@
   scene.add(fill);
 
   /* 그림자를 받는 책상 — 색은 배경이 비치게 투명, 그림자만 */
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.ShadowMaterial({ opacity: .35 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.ShadowMaterial({ opacity: .35 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  /* ── 오브젝트 ───────────────────────────────── */
-  /* 미싱 — 원점이 왼쪽 뒤 바닥 모서리라 가운데로 옮기고, 고무발이 책상에 닿게 올린다 */
-  const sewing = createSewingMachine(THREE, { sewSpeed: 2.2 });
-  sewing.machine.position.set(-200, 11.5, -110);
-  scene.add(sewing.machine);
+  const castShadows = root => root.traverse(o => {
+    if (o.isMesh && !o.material.transparent) o.castShadow = true;   // 가짜 그림자 판(투명)은 빼고
+  });
 
-  /* 미싱 앞에 옹기종기 */
-  const spool = createThreadSpool(THREE, scene, { x: 15, z: 150, size: 32, turn: .35 });
-  const redButton = createButtonRig(THREE, scene, createRedButton(THREE), { x: 165, z: 205, size: 30, spin: .3 });
-  const flowerButton = createButtonRig(THREE, scene, createCreamButton(THREE), { x: 75, z: 265, size: 24, spin: 1.1 });
+  /* ── 오브젝트를 자리에 놓는다 ─────────────────────────
+     목록·호버에서 쓰도록 자리 id 마다 { hit, setHover, lean?, update, open? } 로 모은다 */
+  const placed = new Map();                               // id → [오브젝트…] (단추 자리는 둘)
 
-  /* 바늘꽂이 — 호버하면 통통 튀고 진주핀이 들린다. 누르면 진주핀이 코처럼 꽂힌 뒤 페이지로.
-     튀는 움직임은 pinCushion.js 안에 있다 (여기서 따로 흔들지 않는다) */
-  const PIN_LINK = null;                                  // 왈가왈BOT 페이지가 생기면 주소를 넣는다
+  /* 바늘꽂이 — 몸통+귀 폭이 약 2.6 이라 기준 반지름 1.3 */
+  const pc = place('pinCushion', 1.3);
   const cushion = new THREE.Group();
   const pinCushion = createPinCushion(THREE);
   cushion.add(pinCushion.root);
-  cushion.position.set(-160, 0, 190);
+  cushion.position.set(pc.x, 0, pc.z);
   cushion.rotation.y = .28;
-  cushion.scale.setScalar(54);
-  pinCushion.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  cushion.scale.setScalar(pc.size);
+  castShadows(pinCushion.root);
   scene.add(cushion);
-
-  /* ── 호버 ───────────────────────────────────── */
-  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  const targets = [
-    { name: 'red', obj: redButton.group },
-    { name: 'flower', obj: flowerButton.group },
-    { name: 'spool', obj: spool.hitTarget },
-    { name: 'cushion', obj: cushion }
-  ];
-  let hovered = null;
-
-  let opening = false;                                    // 진주핀이 날아가는 동안은 호버를 받지 않는다
-  function setHover(name) {
-    if (opening) name = null;
-    if (name === hovered) return;
-    hovered = name;
-    redButton.setHover(name === 'red');
-    flowerButton.setHover(name === 'flower');
-    spool.setHover(name === 'spool');
-    pinCushion.setHover(name === 'cushion');
-    stage.style.cursor = name === 'cushion' ? 'pointer' : '';
-  }
-
-  /* 바늘꽂이 누르기 — 진주핀이 코 자리에 꽂힌 뒤 페이지로. 페이지가 없으면 잠시 뒤 되돌린다 */
-  function openCushion() {
-    opening = true;
-    setHover(null);
-    pinCushion.activate(() => {
+  const PIN_LINK = null;                                   // 왈가왈BOT 페이지가 생기면 주소를 넣는다
+  placed.set('pinCushion', [{
+    hit: pinCushion.hitTarget, setHover: on => pinCushion.setHover(on), update: dt => pinCushion.update(dt),
+    open: done => pinCushion.activate(() => {
       if (PIN_LINK) { location.href = PIN_LINK; return; }
-      setTimeout(() => { pinCushion.reset(); opening = false; }, 1200);
-    });
+      setTimeout(() => { pinCushion.reset(); done(); }, 1200);   // 페이지가 없으면 잠시 뒤 되돌린다
+    })
+  }]);
+
+  /* 줄자 */
+  const tape = createTapeMeasure(THREE, scene, { ...place('tapeMeasure'), turn: -.5 });
+  castShadows(tape.root);
+  placed.set('tapeMeasure', [{ hit: tape.hitTarget, setHover: on => tape.setHover(on), lean: p => tape.lean(p), update: dt => tape.update(dt) }]);
+
+  /* 실패 — 길쭉해서 끝판 반지름 대신 전체 길이가 자리에 맞도록 1.27 (메인 장면과 같다) */
+  const spool = createThreadSpool(THREE, scene, { ...place('threadSpool', 1.27), turn: -.35 });
+  placed.set('threadSpool', [{ hit: spool.hitTarget, setHover: on => spool.setHover(on), update: dt => spool.update(dt) }]);
+
+  /* 단추 — 빨간 단추와 꽃단추가 한 자리에. 따로 걸려서 올린 쪽만 반응한다 */
+  const bp = place('button');
+  const redButton = createButtonRig(THREE, scene, createRedButton(THREE), { ...bp, spin: .3 });
+  const flowerButton = createButtonRig(THREE, scene, createCreamButton(THREE), {
+    x: bp.x + bp.size * 1.2, z: bp.z + bp.size * 2.6, size: bp.size * .8, spin: 1.1
+  });
+  placed.set('button', [redButton, flowerButton].map(b => ({
+    hit: b.group, setHover: on => b.setHover(on), lean: p => b.lean(p), update: dt => b.update(dt)
+  })));
+
+  /* 안내서 — 책상 맨 앞 왼쪽. 원점이 닫힌 책의 왼쪽 모서리라 자리 가운데에서 반 폭만큼 뺀다 */
+  const GUIDE_W = 200;
+  const ms = slot('manual');
+  const guide = createGuideBook(THREE, { x: ms.x * K - GUIDE_W / 2, z: ms.z * K, width: GUIDE_W, turn: .04 });
+  scene.add(guide.root);
+  placed.set('manual', [{ hit: guide.hitTarget, setHover: on => guide.setHover(on), update: dt => guide.update(dt) }]);
+
+  /* 미싱 — 책상 안쪽 끝. 원점이 왼쪽 뒤 바닥 모서리(폭 400 · 깊이 150)라 가운데를 자리에 맞춘다.
+     고무발이 책상에 닿게 11.5 올린다. 메인 장면이 잡아 둔 자리는 폭 30cm 라서 0.75 배 —
+     실측(40cm)대로 두면 고개를 들었을 때 화면 위로 넘친다 */
+  const MACHINE = { x: 6 * K, z: -50 * K, scale: .75 };   // mainScene 의 BACKDROP 미싱 자리
+  const sewing = createSewingMachine(THREE, { sewSpeed: 2.2 });
+  sewing.machine.scale.setScalar(MACHINE.scale);
+  sewing.machine.position.set(MACHINE.x - 200 * MACHINE.scale, 11.5 * MACHINE.scale, MACHINE.z - 75 * MACHINE.scale);
+  scene.add(sewing.machine);
+
+  /* ── 아직 없는 자리 — M 키로 켜 보는 표시 (가는 빨간 원 + 이름) ── */
+  const markers = new THREE.Group();
+  markers.visible = false;
+  scene.add(markers);
+  for (const s of SLOTS.filter(s => !placed.has(s.id))) {
+    const r = s.dia / 2 * K;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r - 2.5, r, 64),
+      new THREE.MeshBasicMaterial({ color: 0x7a0706, transparent: true, opacity: .6, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(s.x * K, .6, s.z * K);
+    markers.add(ring);
   }
 
-  /* ── 시점 ───────────────────────────────────── */
-  const target = new THREE.Vector3(0, 95, 90);
-  const cam = { az: .1, pol: 1.1, dist: 1250 };
-  function place() {
-    cam.pol = Math.max(.35, Math.min(1.45, cam.pol));
-    cam.dist = Math.max(550, Math.min(2200, cam.dist));
-    camera.position.set(
-      target.x + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az),
-      target.y + cam.dist * Math.cos(cam.pol),
-      target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
-    camera.lookAt(target);
+  /* ── 전체 목록 ── */
+  const listItems = document.getElementById('listItems');
+  const rows = new Map();
+  for (const s of SLOTS) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = `<span class="ix">${s.index}</span><span class="ko">${s.ko}</span><span class="pj">${s.project}</span>`;
+    b.addEventListener('pointerenter', () => hoverSlot(s.id, 0));
+    b.addEventListener('pointerleave', () => hoverSlot(null));
+    b.addEventListener('click', () => openSlot(s.id));
+    li.appendChild(b); listItems.appendChild(li);
+    rows.set(s.id, b);
   }
-  place();
+  /* menu 폴더 — 누르거나 Enter·Space 로 전체 목록을 열고 닫는다 */
+  const menu = document.getElementById('menu');
+  const toggleList = () => {
+    const open = document.body.classList.toggle('listOpen');
+    menu.setAttribute('aria-label', open ? '전체 목록 닫기' : '전체 목록 열기');
+  };
+  menu.addEventListener('click', toggleList);
+  menu.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleList(); }
+  });
 
-  let drag = null, moved = 0;
-  stage.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; moved = 0; stage.setPointerCapture(e.pointerId); });
-  stage.addEventListener('pointermove', e => {
+  /* ── 호버 — 한 번에 하나만 반응한다 ── */
+  let hovered = null, opening = false;                     // hovered = { id, i } (단추 자리는 둘 중 어느 쪽인지)
+  function hoverSlot(id, i = 0) {
+    if (opening) id = null;
+    if (hovered?.id === id && hovered?.i === i) return;
+    if (hovered) placed.get(hovered.id)?.[hovered.i]?.setHover(false);
+    hovered = id ? { id, i } : null;
+    if (hovered) placed.get(id)?.[i]?.setHover(true);
+    document.body.classList.toggle('onObject', !!(hovered && placed.has(id)));
+    for (const [rid, b] of rows) b.classList.toggle('on', rid === id);
+  }
+
+  function openSlot(id) {
+    const o = placed.get(id)?.[0];
+    if (!o?.open || opening) { if (id) console.log('열기:', id, slot(id)?.project); return; }
+    opening = true;
+    hoverSlot(null);
+    o.open(() => { opening = false; });
+  }
+
+  /* ── 카메라 — 책상 뷰(0) ↔ 고개 든 뷰(1). 메인 장면과 같은 움직임 ── */
+  function spring(value, stiffness, damping) { return { value, target: value, v: 0, stiffness, damping }; }
+  const gaze = spring(0, 34, 11);                          // 살짝 묵직하게 — 목이 움직이는 무게감
+  const V = k => ({ pos: VIEW[k].pos.map(n => n * K), target: VIEW[k].target.map(n => n * K), fov: VIEW[k].fov });
+  const DESK = V('DESK'), RAISE = V('RAISE');
+  const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+  let aspect = 16 / 9;
+  function applyCamera() {
+    const g = gaze.value, e = g * g * (3 - 2 * g);         // 부드럽게 시작하고 멈춤
+    camera.position.copy(_p.fromArray(DESK.pos).lerp(_q.fromArray(RAISE.pos), e));
+    camera.lookAt(_p.fromArray(DESK.target).lerp(_q.fromArray(RAISE.target), e));
+    const base = DESK.fov + (RAISE.fov - DESK.fov) * e;
+    /* 세로로 긴 화면에서도 책상 가로폭이 유지되도록 화각을 넓힌다 */
+    const fov = aspect < 16 / 9 ? base * (16 / 9) / Math.max(aspect, .6) : base;
+    if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  }
+
+  /* 커서를 화면 위쪽 26% 안으로 올리면 그 높이만큼 고개를 든다. 내리면 저절로 돌아온다 */
+  const BAND = .26, DEAD = .02;
+  const gazeFromY = y => Math.max(0, Math.min(1, ((1 - y / innerHeight) - (1 - BAND)) / (BAND - DEAD)));
+
+  /* ── 빨간 점 커서 ── */
+  const dot = document.getElementById('dot');
+  let px = innerWidth / 2, py = innerHeight / 2, tx = px, ty = py;
+
+  /* ── 마우스 ── */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const deskPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), deskPoint = new THREE.Vector3();
+  const targets = [];
+  for (const [id, list] of placed) list.forEach((o, i) => targets.push({ id, i, o }));
+
+  addEventListener('pointermove', ev => {
+    tx = ev.clientX; ty = ev.clientY;
+    gaze.target = gazeFromY(ev.clientY);
+    if (ev.target.closest?.('.listPanel, .menuBody, .menuTab, .menuText')) return;   // 목록 위에서는 목록이 호버를 맡는다
+
     const r = renderer.domElement.getBoundingClientRect();
-    if (drag) {
-      const dx = e.clientX - drag[0], dy = e.clientY - drag[1];
-      moved += Math.abs(dx) + Math.abs(dy);
-      cam.az -= dx * .006; cam.pol -= dy * .006;
-      drag = [e.clientX, e.clientY]; place();
-      return;
-    }
-    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     let best = null;
     for (const t of targets) {
-      const h = ray.intersectObject(t.obj, true)[0];
-      if (h && (!best || h.distance < best.d)) best = { name: t.name, d: h.distance, p: h.point };
+      const h = ray.intersectObject(t.o.hit, true)[0];
+      if (h && (!best || h.distance < best.d)) best = { ...t, d: h.distance, p: h.point };
     }
-    setHover(best ? best.name : null);
-    if (best?.name === 'red') redButton.lean(best.p);
-    if (best?.name === 'flower') flowerButton.lean(best.p);
+    hoverSlot(best?.id ?? null, best?.i ?? 0);
+    if (best?.o.lean) best.o.lean(ray.ray.intersectPlane(deskPlane, deskPoint) ? deskPoint : best.p);
+  }, { passive: true });
+
+  addEventListener('click', ev => {
+    if (ev.target.closest?.('.listPanel, .menuBody, .menuTab, .menuText')) return;
+    if (hovered) openSlot(hovered.id);
   });
-  const end = () => { drag = null; };
-  stage.addEventListener('pointerup', () => {
-    const click = drag && moved < 5;                      // 끌어서 돌린 건 클릭이 아니다
-    end();
-    if (click && hovered === 'cushion') openCushion();
+
+  /* 화면 밖으로 나가면 고개를 내리고 호버를 푼다 */
+  document.addEventListener('mouseleave', () => { gaze.target = 0; hoverSlot(null); });
+
+  /* 휠 — 스케치대로 전체 목록이 옆에서 나온다 */
+  addEventListener('wheel', ev => {
+    if (ev.deltaY > 6) document.body.classList.add('listOpen');
+    else if (ev.deltaY < -6) document.body.classList.remove('listOpen');
+  }, { passive: true });
+
+  /* 마우스가 없는 환경 — 방향키로도 고개를 든다. M 은 빈 자리 표시 */
+  addEventListener('keydown', ev => {
+    if (ev.key === 'ArrowUp')   gaze.target = Math.min(1, gaze.target + .3);
+    if (ev.key === 'ArrowDown') gaze.target = Math.max(0, gaze.target - .3);
+    if (ev.key.toLowerCase() === 'm') markers.visible = !markers.visible;
   });
-  stage.addEventListener('pointercancel', end);
-  stage.addEventListener('pointerleave', () => setHover(null));
-  stage.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
 
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.fov = w / h < 1 ? 30 / Math.max(w / h, .5) : 30;
+    camera.aspect = aspect = w / h;
     camera.updateProjectionMatrix();
+    /* 글자 묶음 비율 — Figma 프레임(1920 × 1080)이 화면에 들어가는 만큼 */
+    document.documentElement.style.setProperty('--u', Math.min(innerWidth / 1920, innerHeight / 1080).toFixed(4));
   }
   new ResizeObserver(resize).observe(stage);
   resize();
 
   /* ── 루프 ───────────────────────────────────── */
+  const gazeHint = document.getElementById('gazeHint'), gazeBar = document.getElementById('gazeBar');
   let prev = performance.now();
   renderer.setAnimationLoop(now => {
     const dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
+
+    if (instant) { gaze.value = gaze.target; gaze.v = 0; }
+    else { gaze.v += (gaze.stiffness * (gaze.target - gaze.value) - gaze.damping * gaze.v) * dt; gaze.value += gaze.v * dt; }
+    applyCamera();
+
     sewing.update(dt);
-    redButton.update(dt);
-    flowerButton.update(dt);
-    spool.update(dt);
-    pinCushion.update(dt);
+    for (const list of placed.values()) for (const o of list) o.update(dt);
+
+    px += (tx - px) * .3; py += (ty - py) * .3;
+    dot.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
+
+    const g = gaze.value;
+    document.body.style.setProperty('--gaze', g.toFixed(3));
+    gazeBar.style.width = (g * 100) + '%';
+    gazeHint.style.opacity = g > .85 ? .3 : 1;
 
     renderer.render(scene, camera);
   });
