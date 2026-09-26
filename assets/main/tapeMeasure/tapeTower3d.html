@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tower Tape 3D</title>
+
+<!--
+  남산타워 줄자 3D 확인용 페이지. 모델은 tapeTower.js 에 있다.
+  드래그로 돌려 보고, 휠로 확대한다. 줄자에 마우스를 올리면 띠가 올라오고 곰돌이가 같이 올라간다.
+  E 키 — 조절판 (곰 모양·자세, 남산타워). 맞춘 값은 '코드 복사'로 tapeTower.js 의 BEAR_SHAPE·BEAR_POSE·TOWER_SHAPE 에 붙인다.
+  주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.
+  ?az=각도 를 붙이면 그 방향에서 멈춰 보여 준다 (0 정면). ?pol=각도 는 내려다보는 각 (0 바로 위).
+  ?open 을 붙이면 띠를 다 뺀 상태로 연다. ?lying 은 메인 화면처럼 눕힌 모습. ?dist ?tx ?ty 는 카메라 거리·바라보는 곳. serve 가 .html 을 떼며 주소 뒤를 버리니 tapeTower3d?open 처럼 연다.
+-->
+
+<style>
+  :root { --black: #171413; --faint: rgba(238, 234, 226, .42); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--black); font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; overflow: hidden; }
+  #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+  #stage.isDragging { cursor: grabbing; }
+  #stage.isHover { cursor: pointer; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .caption {
+    position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); margin: 0;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); pointer-events: none; white-space: nowrap;
+  }
+
+  /* 조절판 — E 키로 열고 닫는다 (바늘꽂이 확인 페이지와 같은 형식) */
+  .tuner {
+    position: fixed; top: 16px; right: 16px; width: 260px; max-height: calc(100% - 32px); overflow: auto;
+    padding: 14px 16px; border-radius: 10px;
+    background: rgba(23, 20, 19, .92); border: 1px solid rgba(238, 234, 226, .14);
+    color: #EEEAE2; font-size: 11px; letter-spacing: .04em;
+  }
+  .tuner[hidden] { display: none; }
+  .tuner h2 { margin: 14px 0 6px; font-size: 10.5px; font-weight: 500; letter-spacing: .14em; color: var(--faint); }
+  .tuner label { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; margin: 8px 0; }
+  .tuner label span { color: rgba(238, 234, 226, .75); }
+  .tuner output { text-align: right; font-variant-numeric: tabular-nums; }
+  .tuner input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: #7A0706; }
+  .tuner pre {
+    margin: 12px 0 8px; padding: 8px; border-radius: 6px; background: rgba(0, 0, 0, .35);
+    white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 10.5px; color: rgba(238, 234, 226, .85);
+  }
+  .tuner .row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .tuner button {
+    flex: 1; padding: 7px 0; border-radius: 6px; cursor: pointer; font: inherit;
+    color: #EEEAE2; background: rgba(238, 234, 226, .08); border: 1px solid rgba(238, 234, 226, .18);
+  }
+  .tuner button:hover { background: rgba(238, 234, 226, .16); }
+  .tuner button.on { background: rgba(122, 7, 6, .55); border-color: #7A0706; }
+</style>
+
+<div id="stage"></div>
+<p class="caption">Drag to orbit · Scroll to zoom · Hover the tape · E 조절판</p>
+
+<!-- 곰·타워 조절판 — 슬라이더로 바꾸면 바로 반영된다. 맞춘 값은 '코드 복사'로 tapeTower.js 에 붙여 넣는다 -->
+<aside class="tuner" id="tuner">
+  <div class="row">
+    <button type="button" data-lock="hug">안은 자세</button>
+    <button type="button" data-lock="up">띠 올린 자세</button>
+    <button type="button" data-lock="mouse">마우스로</button>
+  </div>
+  <h2>곰 모양</h2>
+  <div data-group="BEAR_SHAPE"></div>
+  <h2>곰 자세 (안고 있을 때)</h2>
+  <div data-group="BEAR_POSE"></div>
+  <h2>남산타워</h2>
+  <div data-group="TOWER_SHAPE"></div>
+  <pre id="tunerCode"></pre>
+  <div class="row">
+    <button type="button" id="tunerCopy">코드 복사</button>
+    <button type="button" id="tunerReset">처음 값</button>
+  </div>
+</aside>
+
+<script type="module">
+  import { createTapeTower, BEAR_SHAPE, BEAR_POSE, TOWER_SHAPE } from './tapeTower.js';
+
+  const stage = document.getElementById('stage');
+  const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, 5, 3000);
+
+  /* 스튜디오 반사 + 조명 — 다른 확인 페이지와 같다 */
+  (function environment() {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#6a6460'); gr.addColorStop(.3, '#fff8ee');
+    gr.addColorStop(.45, '#8a8480'); gr.addColorStop(.65, '#2a2624'); gr.addColorStop(1, '#0e0c0c');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromEquirectangular(tex).texture;
+    pm.dispose(); tex.dispose();
+  })();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3230, .5));
+  const key = new THREE.DirectionalLight(0xfff2e4, 2.2);
+  key.position.set(-120, 260, 160);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  Object.assign(key.shadow.camera, { left: -200, right: 200, top: 300, bottom: -150, near: 10, far: 900 });
+  key.shadow.bias = -.001;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, .8);
+  rim.position.set(120, 120, -160);
+  scene.add(rim);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.ShadowMaterial({ opacity: .35 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  /* ?lying 이면 메인 화면처럼 눕힌 모습 (띠가 책상 위에 곡선으로 뽑혀 있다) */
+  const tape = createTapeTower(THREE, scene, { x: 0, z: 0, size: 1, turn: 0, lying: new URLSearchParams(location.search).has('lying') });
+
+  /* ── 시점 — 조절판이 있으니 곰이 잘 보이게 조금 가까이서 시작한다. 띠 끝까지 보려면 휠로 물러난다 ── */
+  const target = new THREE.Vector3(18, 62, 5);
+  const aspect0 = stage.clientWidth / Math.max(1, stage.clientHeight);
+  const cam = { az: .15, pol: 1.4, dist: 330 / Math.min(1, Math.max(aspect0, .45)) ** .6 };
+  const q = new URLSearchParams(location.search);
+  if (q.has('az')) cam.az = Number(q.get('az')) * Math.PI / 180;
+  if (q.has('pol')) cam.pol = Number(q.get('pol')) * Math.PI / 180;   // 0 바로 위에서
+  if (q.has('dist')) cam.dist = Number(q.get('dist'));                // 카메라 거리 (mm)
+  if (q.has('tx')) target.x = Number(q.get('tx'));                    // 바라보는 곳 x (mm)
+  if (q.has('ty')) target.y = Number(q.get('ty'));                    // 바라보는 곳 y (mm)
+  let idle = false;                                                    // 조절하는 동안 돌지 않는다
+  function place() {
+    cam.pol = Math.max(.15, Math.min(Math.PI / 2 - .02, cam.pol));
+    cam.dist = Math.max(80, Math.min(1400, cam.dist));
+    camera.position.set(
+      target.x + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az),
+      target.y + cam.dist * Math.cos(cam.pol),
+      target.z + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
+    camera.lookAt(target);
+  }
+
+  /* ── 호버 — locked: false 안은 자세 고정 · true 띠 올린 자세 고정 · null 마우스로 ── */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let hovered = false, locked = false;
+  function pickAt(e) {
+    if (locked !== null) return;
+    const r = stage.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const on = ray.intersectObject(tape.hitTarget, true).length > 0;
+    if (on !== hovered) { hovered = on; tape.setHover(on); stage.classList.toggle('isHover', on); }
+  }
+
+  /* ── 조절판 ── 모양 슬라이더는 곰을 다시 만들고, 자세 슬라이더는 다음 프레임에 바로 반영된다 */
+  const SLIDERS = {
+    BEAR_SHAPE: [
+      ['SCALE', '전체 크기', .6, 1.6], ['H', '키', 22, 40], ['BOTTOM', '엉덩이 폭', 5, 12], ['BELLY', '배 폭', 6, 13],
+      ['HEAD', '머리 폭', 5, 12], ['CROWN', '머리 꼭대기 (작을수록 뾰족)', 0, 1.4], ['DEPTH', '앞뒤 두께', .6, 1.1],
+      ['EAR_R', '귀 크기', 1.5, 4.5], ['EAR_X', '귀 벌어짐', 2, 8], ['EAR_Y', '귀 높이', 20, 38],
+      ['EYE_X', '눈 간격', 1.5, 6], ['EYE_Y', '눈 높이', 14, 30], ['EYE_S', '눈·입 크기', .5, 2], ['MOUTH_Y', '입 높이', 12, 28],
+      ['SHIRT_TOP', '셔츠 목선', 10, 24], ['SHIRT_BOTTOM', '셔츠 밑단', 2, 10],
+      ['ARM_R', '팔 굵기', 1.2, 4], ['ARM_LEN', '팔 길이', 1, 10], ['SHOULDER_X', '어깨 벌어짐', 5, 11], ['SHOULDER_Y', '어깨 높이', 8, 22],
+      ['LEG_R', '발 크기', 1.5, 5], ['LEG_X', '발 벌어짐', 1.5, 7], ['LEG_Z', '발 앞으로', 0, 7]
+    ],
+    BEAR_POSE: [
+      ['X', '자리 — 좌우', -12, 10], ['Y', '자리 — 높이', -10, 12], ['Z', '자리 — 앞뒤', -4, 24],
+      ['LEAN', '타워 쪽으로 기대기', -.6, .8], ['TURN', '몸 돌리기', -1.6, 1.6],
+      ['L_Z', '타워 쪽 팔 — 옆으로', -3.14, 3.14], ['L_Y', '타워 쪽 팔 — 앞으로 감기', -1.6, 1.6], ['L_X', '타워 쪽 팔 — 앞뒤로 들기', -1.6, 1.6],
+      ['R_Z', '반대 팔 — 옆으로', -3.14, 3.14], ['R_Y', '반대 팔 — 앞으로 감기', -1.6, 1.6], ['R_X', '반대 팔 — 앞뒤로 들기', -1.6, 1.6],
+      ['WAVE', '띠 올렸을 때 흔드는 팔 드는 각', 0, 3.14]
+    ],
+    TOWER_SHAPE: [
+      ['X', '자리 — 좌우', 10, 45], ['Y', '자리 — 높이', -5, 15], ['Z', '자리 — 앞뒤', 5, 30],
+      ['LEAN', '눈금판 쪽으로 기울기', -.4, .6], ['TWIST', '제자리 돌리기', -3.14, 3.14], ['SCALE', '전체 크기', .5, 1.6],
+      ['BASE_R', '받침 굵기', .5, 1.6], ['BASE_H', '받침 높이', .4, 2],
+      ['SHAFT_R', '기둥 굵기', .5, 1.6], ['LOW', '체크 띠 아래 기둥 길이', 2, 40], ['BAND', '체크 띠 높이', 1, 10],
+      ['HIGH', '체크 띠 위 기둥 길이', 2, 45],
+      ['DECK_R', '전망대 굵기', .5, 1.8], ['DECK_H', '전망대 높이', .4, 2.2],
+      ['ANT_R', '안테나 굵기', .4, 1.8], ['ANT_SEG', '안테나 줄무늬 한 칸', 1, 7], ['ANT_N', '안테나 칸 수', 2, 12, 1],
+      ['NEEDLE', '꼭대기 바늘 길이', 0, 25]
+    ]
+  };
+  const TARGET = { BEAR_SHAPE, BEAR_POSE, TOWER_SHAPE };
+  const initial = Object.fromEntries(Object.entries(TARGET).map(([k, o]) => [k, { ...o }]));
+  const fmt = v => { const s = (+v.toFixed(3)).toString(); return s.replace(/^(-?)0\./, '$1.'); };
+  const codeText = () => Object.entries(TARGET)
+    .map(([name, o]) => `export const ${name} = { ${Object.entries(o).map(([k, v]) => `${k}: ${fmt(v)}`).join(', ')} };`)
+    .join('\n');
+  const tunerCode = document.getElementById('tunerCode');
+  const inputs = [];
+  let pending = false;
+  const refresh = shape => {                              // 모양은 한 프레임에 한 번만 다시 만든다
+    tunerCode.textContent = codeText();
+    if (!shape || pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; tape.rebuild(); });
+  };
+  for (const [group, list] of Object.entries(SLIDERS)) {
+    const box = document.querySelector(`[data-group="${group}"]`);
+    for (const [key, label, min, max, step = .005] of list) {
+      const row = document.createElement('label');
+      row.innerHTML = `<span>${label} <small>${key}</small></span><output></output>
+        <input type="range" min="${min}" max="${max}" step="${step}">`;
+      const input = row.querySelector('input'), out = row.querySelector('output');
+      const sync = () => { input.value = TARGET[group][key]; out.textContent = fmt(TARGET[group][key]); };
+      input.addEventListener('input', () => {
+        TARGET[group][key] = +input.value; out.textContent = fmt(+input.value); refresh(group !== 'BEAR_POSE');
+      });
+      sync();
+      inputs.push(sync);
+      box.appendChild(row);
+    }
+  }
+  tunerCode.textContent = codeText();
+  document.getElementById('tunerCopy').addEventListener('click', async e => {
+    const btn = e.currentTarget, text = codeText();
+    try { await navigator.clipboard.writeText(text); }
+    catch { const r = document.createRange(); r.selectNodeContents(tunerCode);
+            getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+    btn.textContent = '복사됨'; setTimeout(() => btn.textContent = '코드 복사', 1200);
+  });
+  document.getElementById('tunerReset').addEventListener('click', () => {
+    for (const k in TARGET) Object.assign(TARGET[k], initial[k]);
+    inputs.forEach(s => s()); refresh(true);
+  });
+  /* 자세 고정 — 조절하는 동안 마우스가 모델에 닿아도 자세가 바뀌지 않게. 처음엔 '안은 자세' (?open 이면 '띠 올린 자세') */
+  const lockButtons = document.querySelectorAll('[data-lock]');
+  const setLock = mode => {
+    locked = mode === 'mouse' ? null : mode === 'up';
+    if (locked !== null) { hovered = locked; tape.setHover(locked); stage.classList.remove('isHover'); }
+    lockButtons.forEach(b => b.classList.toggle('on', b.dataset.lock === mode));
+  };
+  lockButtons.forEach(b => b.addEventListener('click', () => setLock(b.dataset.lock)));
+  setLock(q.has('open') ? 'up' : 'hug');
+  const tuner = document.getElementById('tuner');
+  addEventListener('keydown', e => { if (e.key === 'e' || e.key === 'E') tuner.hidden = !tuner.hidden; });
+
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; idle = false; stage.setPointerCapture(e.pointerId); stage.classList.add('isDragging'); });
+  stage.addEventListener('pointermove', e => {
+    if (!drag) { pickAt(e); return; }
+    cam.az -= (e.clientX - drag[0]) * .008; cam.pol -= (e.clientY - drag[1]) * .008;
+    drag = [e.clientX, e.clientY]; place();
+  });
+  const end = e => { drag = null; stage.classList.remove('isDragging'); if (e) pickAt(e); };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', () => end());
+  stage.addEventListener('pointerleave', () => { if (hovered && locked === null) { hovered = false; tape.setHover(false); stage.classList.remove('isHover'); } });
+  stage.addEventListener('wheel', e => { e.preventDefault(); idle = false; cam.dist *= 1 + Math.sign(e.deltaY) * .08; place(); }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 1 ? 30 / Math.max(w / h, .5) : 30;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize(); place();
+
+  let prev = performance.now();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
+    if (idle) { cam.az += dt * .25; place(); }
+    tape.update(dt);
+    renderer.render(scene, camera);
+  });
+</script>

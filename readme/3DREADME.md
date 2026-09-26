@@ -210,6 +210,8 @@ npx serve "C:\김하은\사용중인폴더\개인 퍼스널 포폴\kimhaeun"
 - 단추: `http://localhost:3000/assets/main/button/buttonFinal.html`
 - 실패: `http://localhost:3000/assets/main/threadSpool/threadSpool3d.html`
 - 바늘꽂이: `http://localhost:3000/assets/main/pinCushion/pinCushion3d.html?az=0` (`az=` 각도 고정, 0 정면 / 90·-90 옆면)
+- 남산타워 줄자: `http://localhost:3000/assets/main/tapeMeasure/tapeTower3d` (E 키 곰 조절판)
+- 쪽가위: `http://localhost:3000/assets/main/scissors/scissors3d`
 - 미싱: `http://localhost:3000/assets/main/sewingMachine3dDetailed.html`
 - 실 결 다시 그리기: `http://localhost:3000/assets/main/threadTexturePainter.html`
 

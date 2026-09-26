@@ -34,7 +34,7 @@ export const SLIM = {
   /* 캡 — 날만 덮는 짧은 U자 */
   CAP_FROM: 1, CAP_TO: 60, CAP_W: 20, CAP_H: 7.5,   // 높이는 몸통(7)보다 살짝만 높게
   /* 색 */
-  BODY: 0xeee8dc, CAP: 0xf4f0e8, BUTTON_C: 0xe2dacb, STEEL: 0xc9ccd0,
+  BODY: 0xeed7a4, CAP: 0xf1dcab, BUTTON_C: 0xd9c08e, STEEL: 0xc9ccd0,   // 단추 크림처럼 노란 기 도는 따뜻한 아이보리
   /* 움직임 */
   CAP_OUT: 70, CAP_SIDE: 28,
   ARM_OPEN: .045,  // 팔 한 짝이 뒤 끝 원판을 축으로 벌어지는 각 (rad) — 두 짝이 반대로 같이 벌어진다

@@ -239,7 +239,7 @@
   import { createRedButton, createCreamButton, createButtonRig } from './assets/main/button/buttonFinal.js';
   import { createThreadSpool } from './assets/main/threadSpool/threadSpool.js';
   import { createPinCushion } from './assets/main/pinCushion/pinCushion.js';
-  import { createTapeMeasure } from './assets/main/tapeMeasure/tapeMeasure.js';
+  import { createTapeTower } from './assets/main/tapeMeasure/tapeTower.js';
   import { createGuideBook } from './assets/main/guide/guideBook.js';
   import { createScissorsSlim } from './assets/main/scissors/scissorsSlim.js';
 
@@ -331,10 +331,11 @@
     })
   }]);
 
-  /* 줄자 */
-  const tape = createTapeMeasure(THREE, scene, { ...place('tapeMeasure'), turn: -.5 });
+  /* 줄자 — 남산타워 줄자를 책상에 눕혀 둔다. 띠는 곡선으로 뽑혀 있고 끝에 곰돌이가 서 있다. 호버하면 살짝 감긴다.
+     케이스 폭이 약 7cm 라 기준 반지름 40. 띠가 오른쪽 뒤로 뻗도록 돌린다 */
+  const tape = createTapeTower(THREE, scene, { ...place('tapeMeasure', 40), turn: -1.2, lying: true });
   castShadows(tape.root);
-  placed.set('tapeMeasure', [{ hit: tape.hitTarget, setHover: on => tape.setHover(on), lean: p => tape.lean(p), update: dt => tape.update(dt) }]);
+  placed.set('tapeMeasure', [{ hit: tape.hitTarget, setHover: on => tape.setHover(on), update: dt => tape.update(dt) }]);
 
   /* 실패 — 길쭉해서 끝판 반지름 대신 전체 길이가 자리에 맞도록 1.27 (메인 장면과 같다) */
   const spool = createThreadSpool(THREE, scene, { ...place('threadSpool', 1.27), turn: -.35 });

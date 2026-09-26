@@ -15,7 +15,7 @@
 */
 
 export const BUTTON_COLORS = {
-  red:    0xb30604,   // 레퍼런스 사진의 빨강. 포인트 레드(#7A0706)보다 밝아 화면에서 튄다
+  red:    0x7c0811,   // 실·바늘꽂이처럼 짙고 맑은 빨강 (0xb30604 는 조명 아래서 빛바래 탁해 보였다)
   cream:  0xf0dcaa,   // 배경2보다 노란 기가 도는 아이보리
   thread: 0xa2855c    // 크림 단추의 십자 바느질 실
 };
@@ -37,7 +37,7 @@ const RIM_KEYS = [
 export function createRedButton(THREE) {
   const mat = new THREE.MeshPhysicalMaterial({
     color: BUTTON_COLORS.red, roughness: .28, metalness: 0,
-    clearcoat: 1, clearcoatRoughness: .05, side: THREE.DoubleSide
+    clearcoat: .7, clearcoatRoughness: .08, envMapIntensity: .55, side: THREE.DoubleSide   // 반사가 세면 분홍빛으로 뜬다
   });
 
   /* 테두리 — 평평한 가운데 경계부터 바깥까지 */
