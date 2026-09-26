@@ -22,7 +22,7 @@
     실패      앞으로 살짝 굴렀다가 돌아온다
     단추      들리고, 커서 쪽으로 기울고, 광이 한 번 지나간다
     미싱      책상 안쪽 끝 — 고개를 들어야 보인다. 천천히 바느질한다
-  아직 없는 자리(재단가위·원단 스와치·거울)는 M 키로 자리 표시를 켜 볼 수 있다.
+  아직 없는 자리(원단 스와치·거울)는 M 키로 자리 표시를 켜 볼 수 있다.
 
   주의: type="module" 이라 file:// 로 바로 열면 안 된다. 정적 서버로 띄운다.  예) npx serve
 -->
@@ -241,6 +241,7 @@
   import { createPinCushion } from './assets/main/pinCushion/pinCushion.js';
   import { createTapeMeasure } from './assets/main/tapeMeasure/tapeMeasure.js';
   import { createGuideBook } from './assets/main/guide/guideBook.js';
+  import { createScissorsSlim } from './assets/main/scissors/scissorsSlim.js';
 
   const stage = document.getElementById('stage');
   const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
@@ -348,6 +349,10 @@
   placed.set('button', [redButton, flowerButton].map(b => ({
     hit: b.group, setHover: on => b.setHover(on), lean: p => b.lean(p), update: dt => b.update(dt)
   })));
+
+  /* 쪽가위 — 캡까지 씌운 길이가 약 118mm 라 기준 반지름 59. 날 끝이 오른쪽 위(안쪽)를 향하게 비스듬히 */
+  const snips = createScissorsSlim(THREE, scene, { ...place('scissors', 59), turn: .45 });
+  placed.set('scissors', [{ hit: snips.hitTarget, setHover: on => snips.setHover(on), update: dt => snips.update(dt) }]);
 
   /* 안내서 — 책상 맨 앞 왼쪽. 원점이 닫힌 책의 왼쪽 모서리라 자리 가운데에서 반 폭만큼 뺀다 */
   const GUIDE_W = 200;
